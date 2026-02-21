@@ -1,0 +1,43 @@
+# Ignore Visual Studio & VS Code settings
+.vs/
+.vscode/
+.idea/
+
+# User-specific files
+*.user
+*.userosscache
+*.suo
+*.userprefs
+
+# Build results
+bin/
+obj/
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ASP.NET HTTPS certificate folder
+certs/
+
+# Environment variables
+.env
+.env.*
+
+# Docker
+Dockerfile
+docker-compose*
+*.dockerfile
+.dockerignore
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# JetBrains Rider settings
+.idea/
