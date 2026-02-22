@@ -26,10 +26,8 @@ certs/
 .env.*
 
 # Docker
-Dockerfile
 docker-compose*
 *.dockerfile
-.dockerignore
 
 # Logs
 logs/
