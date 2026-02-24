@@ -1,6 +1,6 @@
 ﻿using BakeFix.Models;
 using Dapper;
-using Microsoft.Data.SqlClient;
+using MySql.Data.MySqlClient;
 
 namespace BakeFix.Repositories
 {
@@ -15,11 +15,11 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<Expense>> GetAllAsync(DateTime? startDate, DateTime? endDate)
         {
-            using var connection = new SqlConnection(_conn);
+            using var connection = new MySqlConnection(_conn);
 
             string query = @"SELECT * FROM Expenses 
-                             WHERE (@startDate IS NULL OR Date >= @startDate)
-                               AND (@endDate IS NULL OR Date <= @endDate)
+                             WHERE (@startDate IS NULL OR `Date` >= @startDate)
+                               AND (@endDate IS NULL OR `Date` <= @endDate)
                              ORDER BY CreatedAt DESC";
 
             return await connection.QueryAsync<Expense>(query, new { startDate, endDate });
@@ -27,9 +27,10 @@ namespace BakeFix.Repositories
 
         public async Task<Expense> CreateAsync(Expense expense)
         {
-            using var connection = new SqlConnection(_conn);
+            using var connection = new MySqlConnection(_conn);
 
-            string query = @"INSERT INTO Expenses (Id, Amount, Description, Category, Date, CreatedAt)
+            string query = @"INSERT INTO Expenses 
+                             (Id, Amount, Description, Category, `Date`, CreatedAt)
                              VALUES (@Id, @Amount, @Description, @Category, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, expense);
@@ -38,7 +39,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> DeleteAsync(string id)
         {
-            using var connection = new SqlConnection(_conn);
+            using var connection = new MySqlConnection(_conn);
 
             string query = "DELETE FROM Expenses WHERE Id = @Id";
 
@@ -46,5 +47,4 @@ namespace BakeFix.Repositories
             return rows > 0;
         }
     }
-
 }

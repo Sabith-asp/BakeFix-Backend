@@ -1,6 +1,6 @@
 ﻿using BakeFix.Models;
 using Dapper;
-using Microsoft.Data.SqlClient;
+using MySql.Data.MySqlClient;
 
 namespace BakeFix.Repositories
 {
@@ -15,9 +15,12 @@ namespace BakeFix.Repositories
 
         public async Task<User> GetUserByUsernameAsync(string username)
         {
-            const string query = "SELECT Id, Username, PasswordHash FROM Users WHERE Username = @Username";
+            const string query = @"SELECT Id, Username, PasswordHash 
+                                   FROM UsersOfBakeFix 
+                                   WHERE Username = @Username";
 
-            using var connection = new SqlConnection(_connectionString);
+            using var connection = new MySqlConnection(_connectionString);
+
             return await connection.QueryFirstOrDefaultAsync<User>(query, new { Username = username });
         }
     }
