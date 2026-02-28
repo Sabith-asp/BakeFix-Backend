@@ -50,6 +50,8 @@ namespace BakeFix.Repositories
 
             int rows = await connection.ExecuteAsync(query, new { Id = id });
             return rows > 0;
+
+
         }
     }
 }
