@@ -12,12 +12,13 @@ namespace BakeFix.Services
             _repo = repo;
         }
 
-        public async Task<IEnumerable<Expense>> GetAllAsync(string? startDate, string? endDate)
+        public async Task<IEnumerable<Expense>> GetAllAsync(string? startDate, string? endDate, int? limit)
         {
             DateTime? s = string.IsNullOrEmpty(startDate) ? null : DateTime.Parse(startDate);
             DateTime? e = string.IsNullOrEmpty(endDate) ? null : DateTime.Parse(endDate);
+            int? safeLimit = limit.HasValue ? Math.Clamp(limit.Value, 1, 500) : null;
 
-            return await _repo.GetAllAsync(s, e);
+            return await _repo.GetAllAsync(s, e, safeLimit);
         }
 
         public async Task<Expense> CreateAsync(ExpenseFormData request)

@@ -18,6 +18,10 @@ builder.Services.AddScoped<ExpenseRepository>();
 builder.Services.AddScoped<ExpenseService>();
 builder.Services.AddScoped<IncomeRepository>();
 builder.Services.AddScoped<IncomeService>();
+builder.Services.AddScoped<DashboardRepository>();
+builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<EmployeeRepository>();
+builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<WageRepository>();
 builder.Services.AddScoped<WageService>();
 

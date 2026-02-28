@@ -13,7 +13,7 @@ namespace BakeFix.Repositories
             _conn = config.GetConnectionString("DefaultConnection");
         }
 
-        public async Task<IEnumerable<Expense>> GetAllAsync(DateTime? startDate, DateTime? endDate)
+        public async Task<IEnumerable<Expense>> GetAllAsync(DateTime? startDate, DateTime? endDate, int? limit)
         {
             using var connection = new MySqlConnection(_conn);
 
@@ -22,7 +22,12 @@ namespace BakeFix.Repositories
                                AND (@endDate IS NULL OR `Date` <= @endDate)
                              ORDER BY CreatedAt DESC";
 
-            return await connection.QueryAsync<Expense>(query, new { startDate, endDate });
+            if (limit.HasValue)
+            {
+                query += " LIMIT @limit";
+            }
+
+            return await connection.QueryAsync<Expense>(query, new { startDate, endDate, limit });
         }
 
         public async Task<Expense> CreateAsync(Expense expense)

@@ -1,7 +1,6 @@
-﻿using BakeFix.Models;
+using BakeFix.Models;
 using BakeFix.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BakeFix.Controllers
@@ -20,9 +19,9 @@ namespace BakeFix.Controllers
 
         // GET /wage?startDate=2024-01-01&endDate=2024-02-01
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] string? startDate, [FromQuery] string? endDate)
+        public async Task<IActionResult> GetAll([FromQuery] string? startDate, [FromQuery] string? endDate, [FromQuery] int? limit)
         {
-            var wages = await _service.GetAllAsync(startDate, endDate);
+            var wages = await _service.GetAllAsync(startDate, endDate, limit);
             return Ok(wages);
         }
 
@@ -30,8 +29,15 @@ namespace BakeFix.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] WageFormData request)
         {
-            var wage = await _service.CreateAsync(request);
-            return Ok(wage);
+            try
+            {
+                var wage = await _service.CreateAsync(request);
+                return Ok(wage);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         // DELETE /wage/{id}

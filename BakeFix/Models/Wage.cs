@@ -1,10 +1,10 @@
-﻿namespace BakeFix.Models
+namespace BakeFix.Models
 {
     public class WageFormData
     {
         public decimal Amount { get; set; }
-        public string EmployeeName { get; set; }
-        public string Description { get; set; }
+        public Guid EmployeeId { get; set; }
+        public string? Description { get; set; }
         public DateTime Date { get; set; }
     }
 
@@ -12,8 +12,9 @@
     {
         public Guid Id { get; set; }
         public decimal Amount { get; set; }
-        public string EmployeeName { get; set; }
-        public string Description { get; set; }
+        public Guid EmployeeId { get; set; }
+        public string? EmployeeName { get; set; }
+        public string? Description { get; set; }
         public DateTime Date { get; set; }
         public DateTime CreatedAt { get; set; }
     }

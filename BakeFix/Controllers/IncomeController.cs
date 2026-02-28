@@ -20,9 +20,9 @@ namespace BakeFix.Controllers
 
         // GET /income?startDate=2024-01-01&endDate=2024-02-01
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] string? startDate, [FromQuery] string? endDate)
+        public async Task<IActionResult> GetAll([FromQuery] string? startDate, [FromQuery] string? endDate, [FromQuery] int? limit)
         {
-            var incomes = await _service.GetAllAsync(startDate, endDate);
+            var incomes = await _service.GetAllAsync(startDate, endDate, limit);
             return Ok(incomes);
         }
 
