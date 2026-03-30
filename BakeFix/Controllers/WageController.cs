@@ -17,12 +17,16 @@ namespace BakeFix.Controllers
             _service = service;
         }
 
-        // GET /wage?startDate=2024-01-01&endDate=2024-02-01
+        // GET /wage?startDate=2024-01-01&endDate=2024-02-01&page=1&pageSize=20
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] string? startDate, [FromQuery] string? endDate, [FromQuery] int? limit)
+        public async Task<IActionResult> GetAll(
+            [FromQuery] string? startDate,
+            [FromQuery] string? endDate,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
         {
-            var wages = await _service.GetAllAsync(startDate, endDate, limit);
-            return Ok(wages);
+            var result = await _service.GetAllAsync(startDate, endDate, page, pageSize);
+            return Ok(result);
         }
 
         // POST /wage
@@ -33,6 +37,25 @@ namespace BakeFix.Controllers
             {
                 var wage = await _service.CreateAsync(request);
                 return Ok(wage);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        // PUT /wage/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(string id, [FromBody] WageFormData request)
+        {
+            try
+            {
+                var success = await _service.UpdateAsync(id, request);
+
+                if (!success)
+                    return NotFound(new { message = "Wage not found" });
+
+                return NoContent();
             }
             catch (ArgumentException ex)
             {

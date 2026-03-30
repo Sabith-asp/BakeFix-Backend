@@ -13,29 +13,35 @@ namespace BakeFix.Repositories
             _conn = config.GetConnectionString("DefaultConnection");
         }
 
-        public async Task<IEnumerable<Wage>> GetAllAsync(DateTime? startDate, DateTime? endDate, int? limit)
+        public async Task<(IEnumerable<Wage> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
+            DateTime? startDate, DateTime? endDate, int page, int pageSize)
         {
             using var connection = new MySqlConnection(_conn);
 
-            string query = @"SELECT w.Id,
-                                    w.Amount,
-                                    w.EmployeeId,
-                                    e.Name AS EmployeeName,
-                                    w.Description,
-                                    w.`Date`,
-                                    w.CreatedAt
-                             FROM Wages w
-                             LEFT JOIN Employees e ON e.Id = w.EmployeeId
-                             WHERE (@startDate IS NULL OR w.`Date` >= @startDate)
-                               AND (@endDate IS NULL OR w.`Date` <= @endDate)
-                             ORDER BY w.CreatedAt DESC";
+            const string where = @"WHERE (@startDate IS NULL OR w.`Date` >= @startDate)
+                                     AND (@endDate IS NULL OR w.`Date` <= @endDate)";
 
-            if (limit.HasValue)
-            {
-                query += " LIMIT @limit";
-            }
+            var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
+                $"SELECT COUNT(*) AS Count, COALESCE(SUM(w.Amount), 0) AS Amount FROM Wages w {where}",
+                new { startDate, endDate });
 
-            return await connection.QueryAsync<Wage>(query, new { startDate, endDate, limit });
+            int offset = (page - 1) * pageSize;
+            var items = await connection.QueryAsync<Wage>(
+                $@"SELECT w.Id,
+                          w.Amount,
+                          w.EmployeeId,
+                          e.Name AS EmployeeName,
+                          w.Description,
+                          w.`Date`,
+                          w.CreatedAt
+                   FROM Wages w
+                   LEFT JOIN Employees e ON e.Id = w.EmployeeId
+                   {where}
+                   ORDER BY w.`Date` DESC, w.CreatedAt DESC
+                   LIMIT @pageSize OFFSET @offset",
+                new { startDate, endDate, pageSize, offset });
+
+            return (items, summary.Count, summary.Amount);
         }
 
         public async Task<Wage> CreateAsync(Wage wage)
@@ -48,6 +54,18 @@ namespace BakeFix.Repositories
 
             await connection.ExecuteAsync(query, wage);
             return wage;
+        }
+
+        public async Task<bool> UpdateAsync(Wage wage)
+        {
+            using var connection = new MySqlConnection(_conn);
+
+            const string query = @"UPDATE Wages
+                                   SET Amount=@Amount, EmployeeId=@EmployeeId, Description=@Description, `Date`=@Date
+                                   WHERE Id=@Id";
+
+            int rows = await connection.ExecuteAsync(query, wage);
+            return rows > 0;
         }
 
         public async Task<bool> DeleteAsync(string id)

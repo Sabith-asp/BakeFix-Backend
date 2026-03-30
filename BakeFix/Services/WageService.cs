@@ -1,3 +1,4 @@
+using BakeFix.DTOs;
 using BakeFix.Models;
 using BakeFix.Repositories;
 
@@ -14,13 +15,24 @@ namespace BakeFix.Services
             _employeeRepo = employeeRepo;
         }
 
-        public async Task<IEnumerable<Wage>> GetAllAsync(string? startDate, string? endDate, int? limit)
+        public async Task<PagedResult<Wage>> GetAllAsync(string? startDate, string? endDate, int page, int pageSize)
         {
             DateTime? s = string.IsNullOrEmpty(startDate) ? null : DateTime.Parse(startDate);
             DateTime? e = string.IsNullOrEmpty(endDate) ? null : DateTime.Parse(endDate);
-            int? safeLimit = limit.HasValue ? Math.Clamp(limit.Value, 1, 500) : null;
+            int safePage = Math.Max(1, page);
+            int safePageSize = Math.Clamp(pageSize, 1, 100);
 
-            return await _repo.GetAllAsync(s, e, safeLimit);
+            var (items, totalCount, totalAmount) = await _repo.GetAllAsync(s, e, safePage, safePageSize);
+
+            return new PagedResult<Wage>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                TotalAmount = totalAmount,
+                Page = safePage,
+                PageSize = safePageSize,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)safePageSize)
+            };
         }
 
         public async Task<Wage> CreateAsync(WageFormData request)
@@ -42,6 +54,27 @@ namespace BakeFix.Services
             };
 
             return await _repo.CreateAsync(wage);
+        }
+
+        public async Task<bool> UpdateAsync(string id, WageFormData request)
+        {
+            var employeeExists = await _employeeRepo.ExistsAsync(request.EmployeeId);
+            if (!employeeExists)
+            {
+                throw new ArgumentException("Selected employee does not exist");
+            }
+
+            var wage = new Wage
+            {
+                Id = Guid.Parse(id),
+                Amount = request.Amount,
+                EmployeeId = request.EmployeeId,
+                Description = request.Description,
+                Date = request.Date,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            return await _repo.UpdateAsync(wage);
         }
 
         public async Task<bool> DeleteAsync(string id)
