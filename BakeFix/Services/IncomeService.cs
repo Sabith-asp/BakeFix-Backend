@@ -40,6 +40,7 @@ namespace BakeFix.Services
                 Id = Guid.NewGuid(),
                 Amount = request.Amount,
                 Description = request.Description,
+                PaymentMethod = request.PaymentMethod,
                 Date = request.Date,
                 CreatedAt = DateTime.UtcNow
             };
@@ -54,6 +55,7 @@ namespace BakeFix.Services
                 Id = Guid.Parse(id),
                 Amount = request.Amount,
                 Description = request.Description,
+                PaymentMethod = request.PaymentMethod,
                 Date = request.Date,
                 CreatedAt = DateTime.UtcNow
             };

@@ -8,6 +8,7 @@
         public string Category { get; set; }
         public DateTime Date { get; set; }
         public DateTime CreatedAt { get; set; }
+        public string? PaymentMethod { get; set; }
     }
 
     public class ExpenseFormData
@@ -16,5 +17,6 @@
         public string Description { get; set; }
         public string Category { get; set; }
         public DateTime Date { get; set; }
+        public string? PaymentMethod { get; set; }
     }
 }

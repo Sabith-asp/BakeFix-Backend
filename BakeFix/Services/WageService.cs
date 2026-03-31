@@ -56,6 +56,7 @@ namespace BakeFix.Services
                 Amount = request.Amount,
                 EmployeeId = request.EmployeeId,
                 Description = request.Description,
+                PaymentMethod = request.PaymentMethod,
                 Date = request.Date,
                 CreatedAt = DateTime.UtcNow
             };
@@ -77,6 +78,7 @@ namespace BakeFix.Services
                 Amount = request.Amount,
                 EmployeeId = request.EmployeeId,
                 Description = request.Description,
+                PaymentMethod = request.PaymentMethod,
                 Date = request.Date,
                 CreatedAt = DateTime.UtcNow
             };

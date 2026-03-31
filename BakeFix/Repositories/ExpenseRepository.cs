@@ -14,23 +14,24 @@ namespace BakeFix.Repositories
         }
 
         public async Task<(IEnumerable<Expense> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
-            DateTime? startDate, DateTime? endDate, int page, int pageSize)
+            DateTime? startDate, DateTime? endDate, int page, int pageSize, string? category = null)
         {
             using var connection = new MySqlConnection(_conn);
 
             const string where = @"WHERE (@startDate IS NULL OR `Date` >= @startDate)
-                                     AND (@endDate IS NULL OR `Date` <= @endDate)";
+                                     AND (@endDate IS NULL OR `Date` <= @endDate)
+                                     AND (@category IS NULL OR Category = @category)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
                 $"SELECT COUNT(*) AS Count, COALESCE(SUM(Amount), 0) AS Amount FROM Expenses {where}",
-                new { startDate, endDate });
+                new { startDate, endDate, category });
 
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Expense>(
                 $@"SELECT * FROM Expenses {where}
                    ORDER BY `Date` DESC, CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
-                new { startDate, endDate, pageSize, offset });
+                new { startDate, endDate, category, pageSize, offset });
 
             return (items, summary.Count, summary.Amount);
         }
@@ -39,9 +40,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            string query = @"INSERT INTO Expenses 
-                             (Id, Amount, Description, Category, `Date`, CreatedAt)
-                             VALUES (@Id, @Amount, @Description, @Category, @Date, @CreatedAt)";
+            string query = @"INSERT INTO Expenses
+                             (Id, Amount, Description, Category, PaymentMethod, `Date`, CreatedAt)
+                             VALUES (@Id, @Amount, @Description, @Category, @PaymentMethod, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, expense);
             return expense;
@@ -52,7 +53,7 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             const string query = @"UPDATE Expenses
-                                   SET Amount=@Amount, Description=@Description, Category=@Category, `Date`=@Date
+                                   SET Amount=@Amount, Description=@Description, Category=@Category, PaymentMethod=@PaymentMethod, `Date`=@Date
                                    WHERE Id=@Id";
 
             int rows = await connection.ExecuteAsync(query, expense);

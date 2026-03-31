@@ -39,9 +39,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            string query = @"INSERT INTO Incomes 
-                             (Id, Amount, Description, `Date`, CreatedAt)
-                             VALUES (@Id, @Amount, @Description, @Date, @CreatedAt)";
+            string query = @"INSERT INTO Incomes
+                             (Id, Amount, Description, PaymentMethod, `Date`, CreatedAt)
+                             VALUES (@Id, @Amount, @Description, @PaymentMethod, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, income);
             return income;
@@ -52,7 +52,7 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             const string query = @"UPDATE Incomes
-                                   SET Amount=@Amount, Description=@Description, `Date`=@Date
+                                   SET Amount=@Amount, Description=@Description, PaymentMethod=@PaymentMethod, `Date`=@Date
                                    WHERE Id=@Id";
 
             int rows = await connection.ExecuteAsync(query, income);

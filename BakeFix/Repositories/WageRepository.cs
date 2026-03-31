@@ -33,12 +33,14 @@ namespace BakeFix.Repositories
                           w.EmployeeId,
                           e.Name AS EmployeeName,
                           w.Description,
+                          w.PaymentMethod,
                           w.`Date`,
                           w.CreatedAt
                    FROM Wages w
                    LEFT JOIN Employees e ON e.Id = w.EmployeeId
                    {where}
                    ORDER BY w.`Date` DESC, w.CreatedAt DESC
+
                    LIMIT @pageSize OFFSET @offset",
                 new { startDate, endDate, employeeId, pageSize, offset });
 
@@ -70,8 +72,8 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             const string query = @"INSERT INTO Wages
-                                   (Id, Amount, EmployeeId, Description, `Date`, CreatedAt)
-                                   VALUES (@Id, @Amount, @EmployeeId, @Description, @Date, @CreatedAt);";
+                                   (Id, Amount, EmployeeId, Description, PaymentMethod, `Date`, CreatedAt)
+                                   VALUES (@Id, @Amount, @EmployeeId, @Description, @PaymentMethod, @Date, @CreatedAt);";
 
             await connection.ExecuteAsync(query, wage);
             return wage;
@@ -82,7 +84,7 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             const string query = @"UPDATE Wages
-                                   SET Amount=@Amount, EmployeeId=@EmployeeId, Description=@Description, `Date`=@Date
+                                   SET Amount=@Amount, EmployeeId=@EmployeeId, Description=@Description, PaymentMethod=@PaymentMethod, `Date`=@Date
                                    WHERE Id=@Id";
 
             int rows = await connection.ExecuteAsync(query, wage);
