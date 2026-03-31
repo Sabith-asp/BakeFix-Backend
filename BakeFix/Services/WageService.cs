@@ -15,14 +15,14 @@ namespace BakeFix.Services
             _employeeRepo = employeeRepo;
         }
 
-        public async Task<PagedResult<Wage>> GetAllAsync(string? startDate, string? endDate, int page, int pageSize)
+        public async Task<PagedResult<Wage>> GetAllAsync(string? startDate, string? endDate, int page, int pageSize, string? employeeId = null)
         {
             DateTime? s = string.IsNullOrEmpty(startDate) ? null : DateTime.Parse(startDate);
             DateTime? e = string.IsNullOrEmpty(endDate) ? null : DateTime.Parse(endDate);
             int safePage = Math.Max(1, page);
             int safePageSize = Math.Clamp(pageSize, 1, 100);
 
-            var (items, totalCount, totalAmount) = await _repo.GetAllAsync(s, e, safePage, safePageSize);
+            var (items, totalCount, totalAmount) = await _repo.GetAllAsync(s, e, safePage, safePageSize, employeeId);
 
             return new PagedResult<Wage>
             {
@@ -33,6 +33,13 @@ namespace BakeFix.Services
                 PageSize = safePageSize,
                 TotalPages = (int)Math.Ceiling(totalCount / (double)safePageSize)
             };
+        }
+
+        public async Task<IEnumerable<EmployeeWageSummary>> GetEmployeeSummaryAsync(string? startDate, string? endDate)
+        {
+            DateTime? s = string.IsNullOrEmpty(startDate) ? null : DateTime.Parse(startDate);
+            DateTime? e = string.IsNullOrEmpty(endDate) ? null : DateTime.Parse(endDate);
+            return await _repo.GetEmployeeSummaryAsync(s, e);
         }
 
         public async Task<Wage> CreateAsync(WageFormData request)

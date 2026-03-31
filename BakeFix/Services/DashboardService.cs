@@ -19,5 +19,11 @@ namespace BakeFix.Services
 
             return await _repo.GetSummaryAsync(s, e);
         }
+
+        public async Task<IEnumerable<TrendDataPoint>> GetTrendAsync(int months)
+        {
+            int safeMonths = Math.Clamp(months, 1, 12);
+            return await _repo.GetTrendAsync(safeMonths);
+        }
     }
 }

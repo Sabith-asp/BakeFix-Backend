@@ -14,16 +14,17 @@ namespace BakeFix.Repositories
         }
 
         public async Task<(IEnumerable<Wage> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
-            DateTime? startDate, DateTime? endDate, int page, int pageSize)
+            DateTime? startDate, DateTime? endDate, int page, int pageSize, string? employeeId = null)
         {
             using var connection = new MySqlConnection(_conn);
 
             const string where = @"WHERE (@startDate IS NULL OR w.`Date` >= @startDate)
-                                     AND (@endDate IS NULL OR w.`Date` <= @endDate)";
+                                     AND (@endDate IS NULL OR w.`Date` <= @endDate)
+                                     AND (@employeeId IS NULL OR w.EmployeeId = @employeeId)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
                 $"SELECT COUNT(*) AS Count, COALESCE(SUM(w.Amount), 0) AS Amount FROM Wages w {where}",
-                new { startDate, endDate });
+                new { startDate, endDate, employeeId });
 
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Wage>(
@@ -39,9 +40,29 @@ namespace BakeFix.Repositories
                    {where}
                    ORDER BY w.`Date` DESC, w.CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
-                new { startDate, endDate, pageSize, offset });
+                new { startDate, endDate, employeeId, pageSize, offset });
 
             return (items, summary.Count, summary.Amount);
+        }
+
+        public async Task<IEnumerable<EmployeeWageSummary>> GetEmployeeSummaryAsync(DateTime? startDate, DateTime? endDate)
+        {
+            using var connection = new MySqlConnection(_conn);
+
+            const string query = @"
+                SELECT
+                    w.EmployeeId,
+                    e.Name AS EmployeeName,
+                    COUNT(*) AS RecordCount,
+                    COALESCE(SUM(w.Amount), 0) AS TotalAmount
+                FROM Wages w
+                LEFT JOIN Employees e ON e.Id = w.EmployeeId
+                WHERE (@startDate IS NULL OR w.`Date` >= @startDate)
+                  AND (@endDate IS NULL OR w.`Date` <= @endDate)
+                GROUP BY w.EmployeeId, e.Name
+                ORDER BY TotalAmount DESC";
+
+            return await connection.QueryAsync<EmployeeWageSummary>(query, new { startDate, endDate });
         }
 
         public async Task<Wage> CreateAsync(Wage wage)

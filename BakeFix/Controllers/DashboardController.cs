@@ -23,5 +23,13 @@ namespace BakeFix.Controllers
             var summary = await _service.GetSummaryAsync(startDate, endDate);
             return Ok(summary);
         }
+
+        // GET /dashboard/trend?months=6
+        [HttpGet("trend")]
+        public async Task<IActionResult> GetTrend([FromQuery] int months = 6)
+        {
+            var result = await _service.GetTrendAsync(months);
+            return Ok(result);
+        }
     }
 }
