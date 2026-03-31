@@ -2,9 +2,9 @@ name: Backend CI / Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build-and-deploy:
@@ -28,11 +28,11 @@ jobs:
         working-directory: BakeFix
         run: dotnet build --configuration Release --no-restore
 
-      # Only fires on direct pushes to main (not on pull requests).
+      # Only fires on direct pushes to master (not on pull requests).
       # Add secret: Render dashboard → your service → Settings → Deploy Hook → copy URL
       # GitHub repo → Settings → Secrets → Actions → RENDER_DEPLOY_HOOK_URL
       - name: Trigger Render deploy
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: |
           echo "Triggering Render deploy..."
           curl --silent --fail "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
