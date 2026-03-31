@@ -1,0 +1,39 @@
+name: Backend CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencies
+        working-directory: BakeFix
+        run: dotnet restore
+
+      - name: Build (Release)
+        working-directory: BakeFix
+        run: dotnet build --configuration Release --no-restore
+
+      # Only fires on direct pushes to main (not on pull requests).
+      # Add secret: Render dashboard → your service → Settings → Deploy Hook → copy URL
+      # GitHub repo → Settings → Secrets → Actions → RENDER_DEPLOY_HOOK_URL
+      - name: Trigger Render deploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "Triggering Render deploy..."
+          curl --silent --fail "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          echo "Deploy triggered."
