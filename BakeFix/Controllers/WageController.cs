@@ -1,3 +1,4 @@
+using BakeFix.Filters;
 using BakeFix.Models;
 using BakeFix.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -8,6 +9,7 @@ namespace BakeFix.Controllers
     [ApiController]
     [Route("wage")]
     [Authorize]
+    [RequireModule("Wages")]
     public class WageController : ControllerBase
     {
         private readonly WageService _service;

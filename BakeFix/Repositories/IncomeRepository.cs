@@ -1,4 +1,5 @@
-﻿using BakeFix.Models;
+using BakeFix.Models;
+using BakeFix.Services;
 using Dapper;
 using MySql.Data.MySqlClient;
 
@@ -7,30 +8,34 @@ namespace BakeFix.Repositories
     public class IncomeRepository
     {
         private readonly string _conn;
+        private readonly ITenantContext _tenant;
 
-        public IncomeRepository(IConfiguration config)
+        public IncomeRepository(IConfiguration config, ITenantContext tenant)
         {
-            _conn = config.GetConnectionString("DefaultConnection");
+            _conn = config.GetConnectionString("DefaultConnection")!;
+            _tenant = tenant;
         }
 
         public async Task<(IEnumerable<Income> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
             DateTime? startDate, DateTime? endDate, int page, int pageSize)
         {
             using var connection = new MySqlConnection(_conn);
+            var orgId = _tenant.RequiredOrgId;
 
-            const string where = @"WHERE (@startDate IS NULL OR `Date` >= @startDate)
+            const string where = @"WHERE OrganizationId = @orgId
+                                     AND (@startDate IS NULL OR `Date` >= @startDate)
                                      AND (@endDate IS NULL OR `Date` <= @endDate)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
                 $"SELECT COUNT(*) AS Count, COALESCE(SUM(Amount), 0) AS Amount FROM Incomes {where}",
-                new { startDate, endDate });
+                new { orgId, startDate, endDate });
 
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Income>(
                 $@"SELECT * FROM Incomes {where}
                    ORDER BY `Date` DESC, CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
-                new { startDate, endDate, pageSize, offset });
+                new { orgId, startDate, endDate, pageSize, offset });
 
             return (items, summary.Count, summary.Amount);
         }
@@ -38,10 +43,11 @@ namespace BakeFix.Repositories
         public async Task<Income> CreateAsync(Income income)
         {
             using var connection = new MySqlConnection(_conn);
+            income.OrganizationId = _tenant.RequiredOrgId;
 
-            string query = @"INSERT INTO Incomes
-                             (Id, Amount, Description, PaymentMethod, `Date`, CreatedAt)
-                             VALUES (@Id, @Amount, @Description, @PaymentMethod, @Date, @CreatedAt)";
+            const string query = @"INSERT INTO Incomes
+                             (Id, OrganizationId, Amount, Description, PaymentMethod, `Date`, CreatedAt)
+                             VALUES (@Id, @OrganizationId, @Amount, @Description, @PaymentMethod, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, income);
             return income;
@@ -53,9 +59,17 @@ namespace BakeFix.Repositories
 
             const string query = @"UPDATE Incomes
                                    SET Amount=@Amount, Description=@Description, PaymentMethod=@PaymentMethod, `Date`=@Date
-                                   WHERE Id=@Id";
+                                   WHERE Id=@Id AND OrganizationId=@OrgId";
 
-            int rows = await connection.ExecuteAsync(query, income);
+            int rows = await connection.ExecuteAsync(query, new
+            {
+                income.Id,
+                income.Amount,
+                income.Description,
+                income.PaymentMethod,
+                income.Date,
+                OrgId = _tenant.RequiredOrgId
+            });
             return rows > 0;
         }
 
@@ -63,9 +77,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            string query = "DELETE FROM Incomes WHERE Id = @Id";
-
-            int rows = await connection.ExecuteAsync(query, new { Id = id });
+            int rows = await connection.ExecuteAsync(
+                "DELETE FROM Incomes WHERE Id = @Id AND OrganizationId = @OrgId",
+                new { Id = id, OrgId = _tenant.RequiredOrgId });
             return rows > 0;
         }
     }

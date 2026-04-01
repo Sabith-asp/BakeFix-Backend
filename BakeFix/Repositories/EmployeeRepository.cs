@@ -1,4 +1,5 @@
 using BakeFix.Models;
+using BakeFix.Services;
 using Dapper;
 using MySql.Data.MySqlClient;
 
@@ -7,29 +8,30 @@ namespace BakeFix.Repositories
     public class EmployeeRepository
     {
         private readonly string _conn;
+        private readonly ITenantContext _tenant;
 
-        public EmployeeRepository(IConfiguration config)
+        public EmployeeRepository(IConfiguration config, ITenantContext tenant)
         {
-            _conn = config.GetConnectionString("DefaultConnection");
+            _conn = config.GetConnectionString("DefaultConnection")!;
+            _tenant = tenant;
         }
 
         public async Task<IEnumerable<Employee>> GetAllAsync()
         {
             using var connection = new MySqlConnection(_conn);
 
-            const string query = @"SELECT Id, Name, CreatedAt
-                                   FROM Employees
-                                   ORDER BY Name ASC";
-
-            return await connection.QueryAsync<Employee>(query);
+            return await connection.QueryAsync<Employee>(
+                "SELECT Id, OrganizationId, Name, CreatedAt FROM Employees WHERE OrganizationId = @OrgId ORDER BY Name ASC",
+                new { OrgId = _tenant.RequiredOrgId });
         }
 
         public async Task<Employee> CreateAsync(Employee employee)
         {
             using var connection = new MySqlConnection(_conn);
+            employee.OrganizationId = _tenant.RequiredOrgId;
 
-            const string query = @"INSERT INTO Employees (Id, Name, CreatedAt)
-                                   VALUES (@Id, @Name, @CreatedAt);";
+            const string query = @"INSERT INTO Employees (Id, OrganizationId, Name, CreatedAt)
+                                   VALUES (@Id, @OrganizationId, @Name, @CreatedAt)";
 
             await connection.ExecuteAsync(query, employee);
             return employee;
@@ -39,8 +41,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            const string query = "SELECT COUNT(1) FROM Employees WHERE Id = @employeeId";
-            var count = await connection.ExecuteScalarAsync<int>(query, new { employeeId });
+            var count = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM Employees WHERE Id = @employeeId AND OrganizationId = @OrgId",
+                new { employeeId, OrgId = _tenant.RequiredOrgId });
             return count > 0;
         }
 
@@ -48,8 +51,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            const string query = "SELECT COUNT(1) FROM Employees WHERE LOWER(Name) = LOWER(@name)";
-            var count = await connection.ExecuteScalarAsync<int>(query, new { name });
+            var count = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM Employees WHERE LOWER(Name) = LOWER(@name) AND OrganizationId = @OrgId",
+                new { name, OrgId = _tenant.RequiredOrgId });
             return count > 0;
         }
 
@@ -57,8 +61,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            const string query = "SELECT COUNT(1) FROM Employees WHERE LOWER(Name) = LOWER(@name) AND Id != @excludeId";
-            var count = await connection.ExecuteScalarAsync<int>(query, new { name, excludeId });
+            var count = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM Employees WHERE LOWER(Name) = LOWER(@name) AND Id != @excludeId AND OrganizationId = @OrgId",
+                new { name, excludeId, OrgId = _tenant.RequiredOrgId });
             return count > 0;
         }
 
@@ -66,8 +71,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            const string query = "UPDATE Employees SET Name=@Name WHERE Id=@Id";
-            int rows = await connection.ExecuteAsync(query, new { Id = id, Name = name });
+            int rows = await connection.ExecuteAsync(
+                "UPDATE Employees SET Name=@Name WHERE Id=@Id AND OrganizationId=@OrgId",
+                new { Id = id, Name = name, OrgId = _tenant.RequiredOrgId });
             return rows > 0;
         }
 
@@ -75,16 +81,18 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            const string query = "SELECT COUNT(1) FROM Wages WHERE EmployeeId = @id";
-            return await connection.ExecuteScalarAsync<int>(query, new { id });
+            return await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(1) FROM Wages WHERE EmployeeId = @id AND OrganizationId = @OrgId",
+                new { id, OrgId = _tenant.RequiredOrgId });
         }
 
         public async Task<bool> DeleteAsync(Guid id)
         {
             using var connection = new MySqlConnection(_conn);
 
-            const string query = "DELETE FROM Employees WHERE Id = @id";
-            int rows = await connection.ExecuteAsync(query, new { id });
+            int rows = await connection.ExecuteAsync(
+                "DELETE FROM Employees WHERE Id = @id AND OrganizationId = @OrgId",
+                new { id, OrgId = _tenant.RequiredOrgId });
             return rows > 0;
         }
     }

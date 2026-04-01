@@ -2,14 +2,18 @@
 {
     public class LoginRequest
     {
-        public string Username { get; set; }
-        public string Password { get; set; }
+        public string Username { get; set; } = "";
+        public string Password { get; set; } = "";
     }
 
     public class LoginResponse
     {
         public Guid Id { get; set; }
-        public string Username { get; set; }
-        public string Token { get; set; }
+        public string Username { get; set; } = "";
+        public string Token { get; set; } = "";
+        public string Role { get; set; } = "";
+        public Guid? OrganizationId { get; set; }
+        public string OrganizationName { get; set; } = "";
+        public List<string> EnabledModules { get; set; } = new();
     }
 }

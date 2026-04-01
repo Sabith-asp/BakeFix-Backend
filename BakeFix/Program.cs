@@ -1,3 +1,4 @@
+using BakeFix.Filters;
 using BakeFix.Repositories;
 using BakeFix.Services;
 using DotNetEnv;
@@ -8,41 +9,50 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 Env.TraversePath().Load(".env");
 
-// Now resolve ENV:* patterns
 builder.Configuration.AddEnvironmentVariables();
 builder.Configuration["ConnectionStrings:DefaultConnection"] = Environment.GetEnvironmentVariable("DB_CONNECTION");
-// Add services to the container.
+
+// ── HTTP context (needed by TenantContext) ──────────────────────────────────
+builder.Services.AddHttpContextAccessor();
+
+// ── Tenant context ──────────────────────────────────────────────────────────
+builder.Services.AddScoped<ITenantContext, TenantContext>();
+
+// ── Repositories ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<UserRepository>();
-builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();
 builder.Services.AddScoped<ExpenseRepository>();
-builder.Services.AddScoped<ExpenseService>();
 builder.Services.AddScoped<IncomeRepository>();
-builder.Services.AddScoped<IncomeService>();
 builder.Services.AddScoped<DashboardRepository>();
-builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<EmployeeRepository>();
-builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<WageRepository>();
+
+// ── Services ─────────────────────────────────────────────────────────────────
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<ExpenseService>();
+builder.Services.AddScoped<IncomeService>();
+builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<WageService>();
+
+// ── Controllers with global ModuleAccessFilter ───────────────────────────────
+builder.Services.AddScoped<ModuleAccessFilter>();
+builder.Services.AddControllers(opts =>
+{
+    opts.Filters.AddService<ModuleAccessFilter>();
+});
 
 string ResolveEnvToken(string? value)
 {
     if (value is null) return string.Empty;
-
     if (value.StartsWith("ENV:"))
-    {
-        var key = value.Replace("ENV:", "");
-        return Environment.GetEnvironmentVariable(key) ?? string.Empty;
-    }
-
+        return Environment.GetEnvironmentVariable(value.Replace("ENV:", "")) ?? string.Empty;
     return value;
 }
 
 var rawOrigins = builder.Configuration["AppSettings:AllowedOrigins"];
-var resolvedOrigins = ResolveEnvToken(rawOrigins);
-var corsOrigins = resolvedOrigins.Split(";", StringSplitOptions.RemoveEmptyEntries);
+var corsOrigins = ResolveEnvToken(rawOrigins).Split(";", StringSplitOptions.RemoveEmptyEntries);
 
-// 4. Add CORS policy
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -54,37 +64,56 @@ builder.Services.AddCors(options =>
     });
 });
 
-
-var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]);
+var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidateAudience = true,
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidateIssuer           = true,
+            ValidIssuer              = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience         = true,
+            ValidAudience            = builder.Configuration["Jwt:Audience"],
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(key),
-            ValidateLifetime = true
+            IssuerSigningKey         = new SymmetricSecurityKey(key),
+            ValidateLifetime         = true
         };
     });
 
-builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Global exception handler — must be first so it wraps everything
+app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
+{
+    var ex = ctx.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+
+    ctx.Response.ContentType = "application/json";
+    ctx.Response.StatusCode = ex switch
+    {
+        UnauthorizedAccessException => StatusCodes.Status403Forbidden,
+        ArgumentException           => StatusCodes.Status400BadRequest,
+        _                           => StatusCodes.Status500InternalServerError
+    };
+
+    var message = ex switch
+    {
+        UnauthorizedAccessException => ex.Message,
+        ArgumentException           => ex.Message,
+        _                           => "An unexpected error occurred."
+    };
+
+    await ctx.Response.WriteAsJsonAsync(new { message });
+}));
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");

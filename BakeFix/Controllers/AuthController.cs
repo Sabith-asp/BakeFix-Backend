@@ -1,6 +1,5 @@
-﻿using BakeFix.DTOs;
+using BakeFix.DTOs;
 using BakeFix.Services;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BakeFix.Controllers
@@ -22,13 +21,17 @@ namespace BakeFix.Controllers
             var result = await _auth.LoginAsync(request.Username, request.Password);
 
             if (!result.Success)
-                return Unauthorized(new { message = "Invalid credentials" });
+                return Unauthorized(new { message = result.ErrorMessage });
 
             var response = new LoginResponse
             {
-                Id = result.User.Id,
-                Username = result.User.Username,
-                Token = result.Token
+                Id             = result.User!.Id,
+                Username       = result.User.Username,
+                Token          = result.Token!,
+                Role           = result.User.Role,
+                OrganizationId = result.User.OrganizationId,
+                OrganizationName = result.OrgName,
+                EnabledModules = result.Modules
             };
 
             return Ok(response);

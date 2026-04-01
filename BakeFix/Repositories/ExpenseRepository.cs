@@ -1,4 +1,5 @@
-﻿using BakeFix.Models;
+using BakeFix.Models;
+using BakeFix.Services;
 using Dapper;
 using MySql.Data.MySqlClient;
 
@@ -7,31 +8,35 @@ namespace BakeFix.Repositories
     public class ExpenseRepository
     {
         private readonly string _conn;
+        private readonly ITenantContext _tenant;
 
-        public ExpenseRepository(IConfiguration config)
+        public ExpenseRepository(IConfiguration config, ITenantContext tenant)
         {
-            _conn = config.GetConnectionString("DefaultConnection");
+            _conn = config.GetConnectionString("DefaultConnection")!;
+            _tenant = tenant;
         }
 
         public async Task<(IEnumerable<Expense> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
             DateTime? startDate, DateTime? endDate, int page, int pageSize, string? category = null)
         {
             using var connection = new MySqlConnection(_conn);
+            var orgId = _tenant.RequiredOrgId;
 
-            const string where = @"WHERE (@startDate IS NULL OR `Date` >= @startDate)
+            const string where = @"WHERE OrganizationId = @orgId
+                                     AND (@startDate IS NULL OR `Date` >= @startDate)
                                      AND (@endDate IS NULL OR `Date` <= @endDate)
                                      AND (@category IS NULL OR Category = @category)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
                 $"SELECT COUNT(*) AS Count, COALESCE(SUM(Amount), 0) AS Amount FROM Expenses {where}",
-                new { startDate, endDate, category });
+                new { orgId, startDate, endDate, category });
 
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Expense>(
                 $@"SELECT * FROM Expenses {where}
                    ORDER BY `Date` DESC, CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
-                new { startDate, endDate, category, pageSize, offset });
+                new { orgId, startDate, endDate, category, pageSize, offset });
 
             return (items, summary.Count, summary.Amount);
         }
@@ -39,10 +44,11 @@ namespace BakeFix.Repositories
         public async Task<Expense> CreateAsync(Expense expense)
         {
             using var connection = new MySqlConnection(_conn);
+            expense.OrganizationId = _tenant.RequiredOrgId;
 
-            string query = @"INSERT INTO Expenses
-                             (Id, Amount, Description, Category, PaymentMethod, `Date`, CreatedAt)
-                             VALUES (@Id, @Amount, @Description, @Category, @PaymentMethod, @Date, @CreatedAt)";
+            const string query = @"INSERT INTO Expenses
+                             (Id, OrganizationId, Amount, Description, Category, PaymentMethod, `Date`, CreatedAt)
+                             VALUES (@Id, @OrganizationId, @Amount, @Description, @Category, @PaymentMethod, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, expense);
             return expense;
@@ -54,9 +60,18 @@ namespace BakeFix.Repositories
 
             const string query = @"UPDATE Expenses
                                    SET Amount=@Amount, Description=@Description, Category=@Category, PaymentMethod=@PaymentMethod, `Date`=@Date
-                                   WHERE Id=@Id";
+                                   WHERE Id=@Id AND OrganizationId=@OrgId";
 
-            int rows = await connection.ExecuteAsync(query, expense);
+            int rows = await connection.ExecuteAsync(query, new
+            {
+                expense.Id,
+                expense.Amount,
+                expense.Description,
+                expense.Category,
+                expense.PaymentMethod,
+                expense.Date,
+                OrgId = _tenant.RequiredOrgId
+            });
             return rows > 0;
         }
 
@@ -64,9 +79,9 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            string query = "DELETE FROM Expenses WHERE Id = @Id";
-
-            int rows = await connection.ExecuteAsync(query, new { Id = id });
+            int rows = await connection.ExecuteAsync(
+                "DELETE FROM Expenses WHERE Id = @Id AND OrganizationId = @OrgId",
+                new { Id = id, OrgId = _tenant.RequiredOrgId });
             return rows > 0;
         }
     }

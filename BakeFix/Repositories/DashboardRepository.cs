@@ -1,4 +1,5 @@
 using BakeFix.Models;
+using BakeFix.Services;
 using Dapper;
 using MySql.Data.MySqlClient;
 
@@ -7,36 +8,43 @@ namespace BakeFix.Repositories
     public class DashboardRepository
     {
         private readonly string _conn;
+        private readonly ITenantContext _tenant;
 
-        public DashboardRepository(IConfiguration config)
+        public DashboardRepository(IConfiguration config, ITenantContext tenant)
         {
-            _conn = config.GetConnectionString("DefaultConnection");
+            _conn = config.GetConnectionString("DefaultConnection")!;
+            _tenant = tenant;
         }
 
         public async Task<DashboardSummary> GetSummaryAsync(DateTime? startDate, DateTime? endDate)
         {
             using var connection = new MySqlConnection(_conn);
+            var orgId = _tenant.RequiredOrgId;
 
             const string query = @"SELECT
                                      COALESCE((SELECT SUM(Amount)
                                                FROM Incomes
-                                               WHERE (@startDate IS NULL OR `Date` >= @startDate)
+                                               WHERE OrganizationId = @orgId
+                                                 AND (@startDate IS NULL OR `Date` >= @startDate)
                                                  AND (@endDate IS NULL OR `Date` <= @endDate)), 0) AS TotalIncome,
                                      COALESCE((SELECT SUM(Amount)
                                                FROM Expenses
-                                               WHERE (@startDate IS NULL OR `Date` >= @startDate)
+                                               WHERE OrganizationId = @orgId
+                                                 AND (@startDate IS NULL OR `Date` >= @startDate)
                                                  AND (@endDate IS NULL OR `Date` <= @endDate)), 0) AS TotalExpense,
                                      COALESCE((SELECT SUM(Amount)
                                                FROM Wages
-                                               WHERE (@startDate IS NULL OR `Date` >= @startDate)
-                                                 AND (@endDate IS NULL OR `Date` <= @endDate)), 0) AS TotalWage;";
+                                               WHERE OrganizationId = @orgId
+                                                 AND (@startDate IS NULL OR `Date` >= @startDate)
+                                                 AND (@endDate IS NULL OR `Date` <= @endDate)), 0) AS TotalWage";
 
-            return await connection.QuerySingleAsync<DashboardSummary>(query, new { startDate, endDate });
+            return await connection.QuerySingleAsync<DashboardSummary>(query, new { orgId, startDate, endDate });
         }
 
         public async Task<IEnumerable<TrendDataPoint>> GetTrendAsync(int months)
         {
             using var connection = new MySqlConnection(_conn);
+            var orgId = _tenant.RequiredOrgId;
 
             const string query = @"
                 SELECT
@@ -46,18 +54,21 @@ namespace BakeFix.Repositories
                     SUM(CASE WHEN type = 'wage'    THEN Amount ELSE 0 END) AS Wage
                 FROM (
                     SELECT `Date`, Amount, 'income'  AS type FROM Incomes
-                    WHERE `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                    WHERE OrganizationId = @orgId
+                      AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
                     UNION ALL
                     SELECT `Date`, Amount, 'expense' AS type FROM Expenses
-                    WHERE `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                    WHERE OrganizationId = @orgId
+                      AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
                     UNION ALL
                     SELECT `Date`, Amount, 'wage'    AS type FROM Wages
-                    WHERE `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                    WHERE OrganizationId = @orgId
+                      AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
                 ) combined
                 GROUP BY Month
                 ORDER BY Month";
 
-            var rawData = (await connection.QueryAsync<TrendDataPoint>(query, new { months }))
+            var rawData = (await connection.QueryAsync<TrendDataPoint>(query, new { orgId, months }))
                           .ToDictionary(r => r.Month);
 
             var result = new List<TrendDataPoint>();
