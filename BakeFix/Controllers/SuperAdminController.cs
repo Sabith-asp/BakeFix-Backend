@@ -14,13 +14,25 @@ namespace BakeFix.Controllers
     {
         private readonly IOrganizationRepository _orgRepo;
         private readonly UserRepository _userRepo;
+        private readonly DivisionRepository _divisionRepo;
+        private readonly PushSubscriptionRepository _subRepo;
+        private readonly NotificationSettingsRepository _notifSettingsRepo;
         private readonly ITenantContext _tenant;
 
-        public SuperAdminController(IOrganizationRepository orgRepo, UserRepository userRepo, ITenantContext tenant)
+        public SuperAdminController(
+            IOrganizationRepository orgRepo,
+            UserRepository userRepo,
+            DivisionRepository divisionRepo,
+            PushSubscriptionRepository subRepo,
+            NotificationSettingsRepository notifSettingsRepo,
+            ITenantContext tenant)
         {
-            _orgRepo = orgRepo;
-            _userRepo = userRepo;
-            _tenant = tenant;
+            _orgRepo           = orgRepo;
+            _userRepo          = userRepo;
+            _divisionRepo      = divisionRepo;
+            _subRepo           = subRepo;
+            _notifSettingsRepo = notifSettingsRepo;
+            _tenant            = tenant;
         }
 
         private IActionResult? DeniedIfNotSuperAdmin()
@@ -143,6 +155,33 @@ namespace BakeFix.Controllers
                 Id       = user.Id,
                 Username = user.Username,
                 Role     = request.RoleId == 2 ? "OrgAdmin" : "Member"
+            });
+        }
+
+        // GET /admin/organizations/{id}/divisions
+        [HttpGet("organizations/{id:guid}/divisions")]
+        public async Task<IActionResult> GetOrgDivisions(Guid id)
+        {
+            var deny = DeniedIfNotSuperAdmin();
+            if (deny is not null) return deny;
+
+            return Ok(await _divisionRepo.GetByOrgIdAsync(id));
+        }
+
+        // GET /admin/organizations/{id}/notifications
+        [HttpGet("organizations/{id:guid}/notifications")]
+        public async Task<IActionResult> GetOrgNotifications(Guid id)
+        {
+            var deny = DeniedIfNotSuperAdmin();
+            if (deny is not null) return deny;
+
+            var subscriptionCount = await _subRepo.GetCountByOrgIdAsync(id);
+            var settings          = await _notifSettingsRepo.GetByOrgIdAsync(id);
+
+            return Ok(new
+            {
+                subscriptionCount,
+                settings
             });
         }
 

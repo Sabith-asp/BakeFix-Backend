@@ -10,6 +10,8 @@
         public DateTime Date { get; set; }
         public DateTime CreatedAt { get; set; }
         public string? PaymentMethod { get; set; }
+        public Guid? DivisionId { get; set; }
+        public string? DivisionName { get; set; }
     }
 
     public class ExpenseFormData
@@ -19,5 +21,6 @@
         public string Category { get; set; }
         public DateTime Date { get; set; }
         public string? PaymentMethod { get; set; }
+        public Guid? DivisionId { get; set; }
     }
 }

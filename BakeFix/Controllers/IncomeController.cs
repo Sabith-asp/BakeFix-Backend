@@ -18,15 +18,16 @@ namespace BakeFix.Controllers
             _service = service;
         }
 
-        // GET /income?startDate=2024-01-01&endDate=2024-02-01&page=1&pageSize=20
+        // GET /income?startDate=2024-01-01&endDate=2024-02-01&page=1&pageSize=20&divisionId=guid
         [HttpGet]
         public async Task<IActionResult> GetAll(
             [FromQuery] string? startDate,
             [FromQuery] string? endDate,
             [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 20)
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? divisionId = null)
         {
-            var result = await _service.GetAllAsync(startDate, endDate, page, pageSize);
+            var result = await _service.GetAllAsync(startDate, endDate, page, pageSize, divisionId);
             return Ok(result);
         }
 

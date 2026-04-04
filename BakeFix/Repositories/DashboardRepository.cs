@@ -16,7 +16,7 @@ namespace BakeFix.Repositories
             _tenant = tenant;
         }
 
-        public async Task<DashboardSummary> GetSummaryAsync(DateTime? startDate, DateTime? endDate)
+        public async Task<DashboardSummary> GetSummaryAsync(DateTime? startDate, DateTime? endDate, string? divisionId = null)
         {
             using var connection = new MySqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
@@ -26,22 +26,25 @@ namespace BakeFix.Repositories
                                                FROM Incomes
                                                WHERE OrganizationId = @orgId
                                                  AND (@startDate IS NULL OR `Date` >= @startDate)
-                                                 AND (@endDate IS NULL OR `Date` <= @endDate)), 0) AS TotalIncome,
+                                                 AND (@endDate IS NULL OR `Date` <= @endDate)
+                                                 AND (@divisionId IS NULL OR DivisionId = @divisionId)), 0) AS TotalIncome,
                                      COALESCE((SELECT SUM(Amount)
                                                FROM Expenses
                                                WHERE OrganizationId = @orgId
                                                  AND (@startDate IS NULL OR `Date` >= @startDate)
-                                                 AND (@endDate IS NULL OR `Date` <= @endDate)), 0) AS TotalExpense,
+                                                 AND (@endDate IS NULL OR `Date` <= @endDate)
+                                                 AND (@divisionId IS NULL OR DivisionId = @divisionId)), 0) AS TotalExpense,
                                      COALESCE((SELECT SUM(Amount)
                                                FROM Wages
                                                WHERE OrganizationId = @orgId
                                                  AND (@startDate IS NULL OR `Date` >= @startDate)
-                                                 AND (@endDate IS NULL OR `Date` <= @endDate)), 0) AS TotalWage";
+                                                 AND (@endDate IS NULL OR `Date` <= @endDate)
+                                                 AND (@divisionId IS NULL OR DivisionId = @divisionId)), 0) AS TotalWage";
 
-            return await connection.QuerySingleAsync<DashboardSummary>(query, new { orgId, startDate, endDate });
+            return await connection.QuerySingleAsync<DashboardSummary>(query, new { orgId, startDate, endDate, divisionId });
         }
 
-        public async Task<IEnumerable<TrendDataPoint>> GetTrendAsync(int months)
+        public async Task<IEnumerable<TrendDataPoint>> GetTrendAsync(int months, string? divisionId = null)
         {
             using var connection = new MySqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
@@ -56,19 +59,22 @@ namespace BakeFix.Repositories
                     SELECT `Date`, Amount, 'income'  AS type FROM Incomes
                     WHERE OrganizationId = @orgId
                       AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                      AND (@divisionId IS NULL OR DivisionId = @divisionId)
                     UNION ALL
                     SELECT `Date`, Amount, 'expense' AS type FROM Expenses
                     WHERE OrganizationId = @orgId
                       AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                      AND (@divisionId IS NULL OR DivisionId = @divisionId)
                     UNION ALL
                     SELECT `Date`, Amount, 'wage'    AS type FROM Wages
                     WHERE OrganizationId = @orgId
                       AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                      AND (@divisionId IS NULL OR DivisionId = @divisionId)
                 ) combined
                 GROUP BY Month
                 ORDER BY Month";
 
-            var rawData = (await connection.QueryAsync<TrendDataPoint>(query, new { orgId, months }))
+            var rawData = (await connection.QueryAsync<TrendDataPoint>(query, new { orgId, months, divisionId }))
                           .ToDictionary(r => r.Month);
 
             var result = new List<TrendDataPoint>();

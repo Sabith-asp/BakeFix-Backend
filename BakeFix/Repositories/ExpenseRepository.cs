@@ -17,26 +17,32 @@ namespace BakeFix.Repositories
         }
 
         public async Task<(IEnumerable<Expense> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
-            DateTime? startDate, DateTime? endDate, int page, int pageSize, string? category = null)
+            DateTime? startDate, DateTime? endDate, int page, int pageSize, string? category = null, string? divisionId = null)
         {
             using var connection = new MySqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
-            const string where = @"WHERE OrganizationId = @orgId
-                                     AND (@startDate IS NULL OR `Date` >= @startDate)
-                                     AND (@endDate IS NULL OR `Date` <= @endDate)
-                                     AND (@category IS NULL OR Category = @category)";
+            const string where = @"WHERE e.OrganizationId = @orgId
+                                     AND (@startDate IS NULL OR e.`Date` >= @startDate)
+                                     AND (@endDate IS NULL OR e.`Date` <= @endDate)
+                                     AND (@category IS NULL OR e.Category = @category)
+                                     AND (@divisionId IS NULL OR e.DivisionId = @divisionId)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
-                $"SELECT COUNT(*) AS Count, COALESCE(SUM(Amount), 0) AS Amount FROM Expenses {where}",
-                new { orgId, startDate, endDate, category });
+                $"SELECT COUNT(*) AS Count, COALESCE(SUM(e.Amount), 0) AS Amount FROM Expenses e {where}",
+                new { orgId, startDate, endDate, category, divisionId });
 
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Expense>(
-                $@"SELECT * FROM Expenses {where}
-                   ORDER BY `Date` DESC, CreatedAt DESC
+                $@"SELECT e.Id, e.OrganizationId, e.Amount, e.Description, e.Category,
+                          e.PaymentMethod, e.`Date`, e.CreatedAt, e.DivisionId,
+                          d.Name AS DivisionName
+                   FROM Expenses e
+                   LEFT JOIN Divisions d ON d.Id = e.DivisionId
+                   {where}
+                   ORDER BY e.`Date` DESC, e.CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
-                new { orgId, startDate, endDate, category, pageSize, offset });
+                new { orgId, startDate, endDate, category, divisionId, pageSize, offset });
 
             return (items, summary.Count, summary.Amount);
         }
@@ -47,8 +53,8 @@ namespace BakeFix.Repositories
             expense.OrganizationId = _tenant.RequiredOrgId;
 
             const string query = @"INSERT INTO Expenses
-                             (Id, OrganizationId, Amount, Description, Category, PaymentMethod, `Date`, CreatedAt)
-                             VALUES (@Id, @OrganizationId, @Amount, @Description, @Category, @PaymentMethod, @Date, @CreatedAt)";
+                             (Id, OrganizationId, Amount, Description, Category, PaymentMethod, DivisionId, `Date`, CreatedAt)
+                             VALUES (@Id, @OrganizationId, @Amount, @Description, @Category, @PaymentMethod, @DivisionId, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, expense);
             return expense;
@@ -59,7 +65,8 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             const string query = @"UPDATE Expenses
-                                   SET Amount=@Amount, Description=@Description, Category=@Category, PaymentMethod=@PaymentMethod, `Date`=@Date
+                                   SET Amount=@Amount, Description=@Description, Category=@Category,
+                                       PaymentMethod=@PaymentMethod, DivisionId=@DivisionId, `Date`=@Date
                                    WHERE Id=@Id AND OrganizationId=@OrgId";
 
             int rows = await connection.ExecuteAsync(query, new
@@ -69,6 +76,7 @@ namespace BakeFix.Repositories
                 expense.Description,
                 expense.Category,
                 expense.PaymentMethod,
+                expense.DivisionId,
                 expense.Date,
                 OrgId = _tenant.RequiredOrgId
             });

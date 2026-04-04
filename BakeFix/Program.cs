@@ -26,6 +26,9 @@ builder.Services.AddScoped<IncomeRepository>();
 builder.Services.AddScoped<DashboardRepository>();
 builder.Services.AddScoped<EmployeeRepository>();
 builder.Services.AddScoped<WageRepository>();
+builder.Services.AddScoped<DivisionRepository>();
+builder.Services.AddScoped<PushSubscriptionRepository>();
+builder.Services.AddScoped<NotificationSettingsRepository>();
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AuthService>();
@@ -34,6 +37,9 @@ builder.Services.AddScoped<IncomeService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<EmployeeService>();
 builder.Services.AddScoped<WageService>();
+builder.Services.AddScoped<DivisionService>();
+builder.Services.AddScoped<PushNotificationService>();
+builder.Services.AddHostedService<NotificationSchedulerService>();
 
 // ── Controllers with global ModuleAccessFilter ───────────────────────────────
 builder.Services.AddScoped<ModuleAccessFilter>();

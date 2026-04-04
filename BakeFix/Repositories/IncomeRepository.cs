@@ -17,25 +17,31 @@ namespace BakeFix.Repositories
         }
 
         public async Task<(IEnumerable<Income> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
-            DateTime? startDate, DateTime? endDate, int page, int pageSize)
+            DateTime? startDate, DateTime? endDate, int page, int pageSize, string? divisionId = null)
         {
             using var connection = new MySqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
-            const string where = @"WHERE OrganizationId = @orgId
-                                     AND (@startDate IS NULL OR `Date` >= @startDate)
-                                     AND (@endDate IS NULL OR `Date` <= @endDate)";
+            const string where = @"WHERE i.OrganizationId = @orgId
+                                     AND (@startDate IS NULL OR i.`Date` >= @startDate)
+                                     AND (@endDate IS NULL OR i.`Date` <= @endDate)
+                                     AND (@divisionId IS NULL OR i.DivisionId = @divisionId)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
-                $"SELECT COUNT(*) AS Count, COALESCE(SUM(Amount), 0) AS Amount FROM Incomes {where}",
-                new { orgId, startDate, endDate });
+                $"SELECT COUNT(*) AS Count, COALESCE(SUM(i.Amount), 0) AS Amount FROM Incomes i {where}",
+                new { orgId, startDate, endDate, divisionId });
 
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Income>(
-                $@"SELECT * FROM Incomes {where}
-                   ORDER BY `Date` DESC, CreatedAt DESC
+                $@"SELECT i.Id, i.OrganizationId, i.Amount, i.Description,
+                          i.PaymentMethod, i.`Date`, i.CreatedAt, i.DivisionId,
+                          d.Name AS DivisionName
+                   FROM Incomes i
+                   LEFT JOIN Divisions d ON d.Id = i.DivisionId
+                   {where}
+                   ORDER BY i.`Date` DESC, i.CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
-                new { orgId, startDate, endDate, pageSize, offset });
+                new { orgId, startDate, endDate, divisionId, pageSize, offset });
 
             return (items, summary.Count, summary.Amount);
         }
@@ -46,8 +52,8 @@ namespace BakeFix.Repositories
             income.OrganizationId = _tenant.RequiredOrgId;
 
             const string query = @"INSERT INTO Incomes
-                             (Id, OrganizationId, Amount, Description, PaymentMethod, `Date`, CreatedAt)
-                             VALUES (@Id, @OrganizationId, @Amount, @Description, @PaymentMethod, @Date, @CreatedAt)";
+                             (Id, OrganizationId, Amount, Description, PaymentMethod, DivisionId, `Date`, CreatedAt)
+                             VALUES (@Id, @OrganizationId, @Amount, @Description, @PaymentMethod, @DivisionId, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, income);
             return income;
@@ -58,7 +64,8 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             const string query = @"UPDATE Incomes
-                                   SET Amount=@Amount, Description=@Description, PaymentMethod=@PaymentMethod, `Date`=@Date
+                                   SET Amount=@Amount, Description=@Description,
+                                       PaymentMethod=@PaymentMethod, DivisionId=@DivisionId, `Date`=@Date
                                    WHERE Id=@Id AND OrganizationId=@OrgId";
 
             int rows = await connection.ExecuteAsync(query, new
@@ -67,6 +74,7 @@ namespace BakeFix.Repositories
                 income.Amount,
                 income.Description,
                 income.PaymentMethod,
+                income.DivisionId,
                 income.Date,
                 OrgId = _tenant.RequiredOrgId
             });

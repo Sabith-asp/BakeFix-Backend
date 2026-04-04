@@ -13,14 +13,14 @@ namespace BakeFix.Services
             _repo = repo;
         }
 
-        public async Task<PagedResult<Income>> GetAllAsync(string? startDate, string? endDate, int page, int pageSize)
+        public async Task<PagedResult<Income>> GetAllAsync(string? startDate, string? endDate, int page, int pageSize, string? divisionId = null)
         {
             DateTime? s = string.IsNullOrEmpty(startDate) ? null : DateTime.Parse(startDate);
             DateTime? e = string.IsNullOrEmpty(endDate) ? null : DateTime.Parse(endDate);
             int safePage = Math.Max(1, page);
             int safePageSize = Math.Clamp(pageSize, 1, 100);
 
-            var (items, totalCount, totalAmount) = await _repo.GetAllAsync(s, e, safePage, safePageSize);
+            var (items, totalCount, totalAmount) = await _repo.GetAllAsync(s, e, safePage, safePageSize, divisionId);
 
             return new PagedResult<Income>
             {
@@ -41,6 +41,7 @@ namespace BakeFix.Services
                 Amount = request.Amount,
                 Description = request.Description,
                 PaymentMethod = request.PaymentMethod,
+                DivisionId = request.DivisionId,
                 Date = request.Date,
                 CreatedAt = DateTime.UtcNow
             };
@@ -56,6 +57,7 @@ namespace BakeFix.Services
                 Amount = request.Amount,
                 Description = request.Description,
                 PaymentMethod = request.PaymentMethod,
+                DivisionId = request.DivisionId,
                 Date = request.Date,
                 CreatedAt = DateTime.UtcNow
             };

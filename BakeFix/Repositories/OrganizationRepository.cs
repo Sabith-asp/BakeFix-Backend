@@ -81,10 +81,10 @@ namespace BakeFix.Repositories
                   SELECT @OrgId, Id, TRUE FROM Modules WHERE Name IN ('Income', 'Expenses')",
                 new { OrgId = org.Id });
 
-            // Wages + Employees start disabled — SuperAdmin must enable them explicitly
+            // Wages, Employees, Divisions, Notifications start disabled — SuperAdmin must enable them explicitly
             await connection.ExecuteAsync(
                 @"INSERT INTO OrganizationModules (OrganizationId, ModuleId, IsEnabled)
-                  SELECT @OrgId, Id, FALSE FROM Modules WHERE Name IN ('Wages', 'Employees')",
+                  SELECT @OrgId, Id, FALSE FROM Modules WHERE Name IN ('Wages', 'Employees', 'Divisions', 'Notifications')",
                 new { OrgId = org.Id });
 
             org.EnabledModules = new List<string> { "Income", "Expenses" };

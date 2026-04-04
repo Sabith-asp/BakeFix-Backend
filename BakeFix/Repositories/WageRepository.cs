@@ -17,7 +17,7 @@ namespace BakeFix.Repositories
         }
 
         public async Task<(IEnumerable<Wage> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
-            DateTime? startDate, DateTime? endDate, int page, int pageSize, string? employeeId = null)
+            DateTime? startDate, DateTime? endDate, int page, int pageSize, string? employeeId = null, string? divisionId = null)
         {
             using var connection = new MySqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
@@ -25,11 +25,12 @@ namespace BakeFix.Repositories
             const string where = @"WHERE w.OrganizationId = @orgId
                                      AND (@startDate IS NULL OR w.`Date` >= @startDate)
                                      AND (@endDate IS NULL OR w.`Date` <= @endDate)
-                                     AND (@employeeId IS NULL OR w.EmployeeId = @employeeId)";
+                                     AND (@employeeId IS NULL OR w.EmployeeId = @employeeId)
+                                     AND (@divisionId IS NULL OR w.DivisionId = @divisionId)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
                 $"SELECT COUNT(*) AS Count, COALESCE(SUM(w.Amount), 0) AS Amount FROM Wages w {where}",
-                new { orgId, startDate, endDate, employeeId });
+                new { orgId, startDate, endDate, employeeId, divisionId });
 
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Wage>(
@@ -41,13 +42,16 @@ namespace BakeFix.Repositories
                           w.Description,
                           w.PaymentMethod,
                           w.`Date`,
-                          w.CreatedAt
+                          w.CreatedAt,
+                          w.DivisionId,
+                          d.Name AS DivisionName
                    FROM Wages w
                    LEFT JOIN Employees e ON e.Id = w.EmployeeId
+                   LEFT JOIN Divisions d ON d.Id = w.DivisionId
                    {where}
                    ORDER BY w.`Date` DESC, w.CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
-                new { orgId, startDate, endDate, employeeId, pageSize, offset });
+                new { orgId, startDate, endDate, employeeId, divisionId, pageSize, offset });
 
             return (items, summary.Count, summary.Amount);
         }
@@ -80,8 +84,8 @@ namespace BakeFix.Repositories
             wage.OrganizationId = _tenant.RequiredOrgId;
 
             const string query = @"INSERT INTO Wages
-                                   (Id, OrganizationId, Amount, EmployeeId, Description, PaymentMethod, `Date`, CreatedAt)
-                                   VALUES (@Id, @OrganizationId, @Amount, @EmployeeId, @Description, @PaymentMethod, @Date, @CreatedAt)";
+                                   (Id, OrganizationId, Amount, EmployeeId, Description, PaymentMethod, DivisionId, `Date`, CreatedAt)
+                                   VALUES (@Id, @OrganizationId, @Amount, @EmployeeId, @Description, @PaymentMethod, @DivisionId, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, wage);
             return wage;
@@ -92,7 +96,8 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             const string query = @"UPDATE Wages
-                                   SET Amount=@Amount, EmployeeId=@EmployeeId, Description=@Description, PaymentMethod=@PaymentMethod, `Date`=@Date
+                                   SET Amount=@Amount, EmployeeId=@EmployeeId, Description=@Description,
+                                       PaymentMethod=@PaymentMethod, DivisionId=@DivisionId, `Date`=@Date
                                    WHERE Id=@Id AND OrganizationId=@OrgId";
 
             int rows = await connection.ExecuteAsync(query, new
@@ -102,6 +107,7 @@ namespace BakeFix.Repositories
                 wage.EmployeeId,
                 wage.Description,
                 wage.PaymentMethod,
+                wage.DivisionId,
                 wage.Date,
                 OrgId = _tenant.RequiredOrgId
             });
