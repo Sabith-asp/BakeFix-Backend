@@ -58,6 +58,9 @@ string ResolveEnvToken(string? value)
     return value;
 }
 
+builder.Configuration["Vapid:PublicKey"]  = ResolveEnvToken(builder.Configuration["Vapid:PublicKey"]);
+builder.Configuration["Vapid:PrivateKey"] = ResolveEnvToken(builder.Configuration["Vapid:PrivateKey"]);
+
 var rawOrigins = builder.Configuration["AppSettings:AllowedOrigins"];
 var corsOrigins = ResolveEnvToken(rawOrigins).Split(";", StringSplitOptions.RemoveEmptyEntries);
 
