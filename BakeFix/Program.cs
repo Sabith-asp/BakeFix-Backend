@@ -1,4 +1,5 @@
 using BakeFix.Filters;
+using BakeFix.Migrations;
 using BakeFix.Repositories;
 using BakeFix.Services;
 using DotNetEnv;
@@ -30,6 +31,9 @@ builder.Services.AddScoped<DivisionRepository>();
 builder.Services.AddScoped<PushSubscriptionRepository>();
 builder.Services.AddScoped<NotificationSettingsRepository>();
 builder.Services.AddScoped<DebtRepository>();
+builder.Services.AddScoped<ProductCategoryRepository>();
+builder.Services.AddScoped<ProductRepository>();
+builder.Services.AddScoped<StockTransactionRepository>();
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AuthService>();
@@ -41,7 +45,9 @@ builder.Services.AddScoped<WageService>();
 builder.Services.AddScoped<DivisionService>();
 builder.Services.AddScoped<PushNotificationService>();
 builder.Services.AddScoped<DebtService>();
+builder.Services.AddScoped<InventoryService>();
 builder.Services.AddHostedService<NotificationSchedulerService>();
+builder.Services.AddSingleton<DatabaseMigrator>();
 
 // ── Controllers with global ModuleAccessFilter ───────────────────────────────
 builder.Services.AddScoped<ModuleAccessFilter>();
@@ -58,8 +64,9 @@ string ResolveEnvToken(string? value)
     return value;
 }
 
-builder.Configuration["Vapid:PublicKey"]  = ResolveEnvToken(builder.Configuration["Vapid:PublicKey"]);
-builder.Configuration["Vapid:PrivateKey"] = ResolveEnvToken(builder.Configuration["Vapid:PrivateKey"]);
+builder.Configuration["Vapid:PublicKey"]             = ResolveEnvToken(builder.Configuration["Vapid:PublicKey"]);
+builder.Configuration["Vapid:PrivateKey"]            = ResolveEnvToken(builder.Configuration["Vapid:PrivateKey"]);
+builder.Configuration["AppSettings:RunMigrations"]   = ResolveEnvToken(builder.Configuration["AppSettings:RunMigrations"]);
 
 var rawOrigins = builder.Configuration["AppSettings:AllowedOrigins"];
 var corsOrigins = ResolveEnvToken(rawOrigins).Split(";", StringSplitOptions.RemoveEmptyEntries);
@@ -96,6 +103,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Run database migrations before accepting requests
+var migrator = app.Services.GetRequiredService<DatabaseMigrator>();
+await migrator.RunAsync();
 
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
