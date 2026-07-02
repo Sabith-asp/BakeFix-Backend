@@ -8,10 +8,12 @@ using System.Security.Claims;
 
 namespace BakeFix.Controllers
 {
+    /// <summary>Web Push notification subscriptions and settings. Requires the <b>Notifications</b> module.</summary>
     [ApiController]
     [Route("notifications")]
     [Authorize]
     [RequireModule("Notifications")]
+    [Produces("application/json")]
     public class NotificationController : ControllerBase
     {
         private readonly PushNotificationService _pushService;
@@ -37,15 +39,24 @@ namespace BakeFix.Controllers
             return Guid.TryParse(raw, out var id) ? id : Guid.Empty;
         }
 
-        // GET /notifications/vapid-public-key
+        /// <summary>Get the VAPID public key needed to create a browser push subscription.</summary>
+        /// <remarks>Pass this key to <c>ServiceWorkerRegistration.pushManager.subscribe()</c> on the client.</remarks>
         [HttpGet("vapid-public-key")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public IActionResult GetVapidPublicKey()
         {
             return Ok(new { key = _pushService.GetPublicKey() });
         }
 
-        // POST /notifications/subscribe
+        /// <summary>Register a browser push subscription for the current user.</summary>
+        /// <param name="request">Push subscription endpoint and keys from the browser PushManager API.</param>
         [HttpPost("subscribe")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> Subscribe([FromBody] PushSubscriptionFormData request)
         {
             if (string.IsNullOrWhiteSpace(request.Endpoint))
@@ -66,23 +77,36 @@ namespace BakeFix.Controllers
             return Ok(new { message = "Subscribed successfully." });
         }
 
-        // DELETE /notifications/subscribe
+        /// <summary>Remove a browser push subscription for the current user.</summary>
+        /// <param name="request">The subscription endpoint to remove.</param>
         [HttpDelete("subscribe")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> Unsubscribe([FromBody] UnsubscribeRequest request)
         {
             await _subRepo.DeleteAsync(request.Endpoint, GetUserId());
             return NoContent();
         }
 
-        // GET /notifications/settings
+        /// <summary>Get the organisation's notification schedule settings.</summary>
         [HttpGet("settings")]
+        [ProducesResponseType(typeof(NotificationSettings), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> GetSettings()
         {
             return Ok(await _settingsRepo.GetAsync());
         }
 
-        // PUT /notifications/settings
+        /// <summary>Update the organisation's notification schedule settings.</summary>
+        /// <remarks><c>ReminderHour</c> must be between 0 and 23 (24-hour clock).</remarks>
+        /// <param name="request">Notification settings.</param>
         [HttpPut("settings")]
+        [ProducesResponseType(typeof(NotificationSettings), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> UpdateSettings([FromBody] NotificationSettingsFormData request)
         {
             if (request.ReminderHour < 0 || request.ReminderHour > 23)
@@ -101,8 +125,11 @@ namespace BakeFix.Controllers
             return Ok(settings);
         }
 
-        // POST /notifications/test
+        /// <summary>Send a test push notification to all subscribed devices in the organisation.</summary>
         [HttpPost("test")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> SendTest()
         {
             await _pushService.SendToOrgAsync(

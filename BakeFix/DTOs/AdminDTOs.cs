@@ -2,8 +2,14 @@ namespace BakeFix.DTOs
 {
     public class CreateOrgRequest
     {
-        public string Name { get; set; } = "";
-        public string Slug { get; set; } = "";
+        public string Name     { get; set; } = "";
+        public string Slug     { get; set; } = "";
+        public string Timezone { get; set; } = "Asia/Kolkata";
+    }
+
+    public class UpdateTimezoneRequest
+    {
+        public string Timezone { get; set; } = "";
     }
 
     public class ToggleModuleRequest

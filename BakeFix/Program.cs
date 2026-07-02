@@ -5,6 +5,7 @@ using BakeFix.Services;
 using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +35,8 @@ builder.Services.AddScoped<DebtRepository>();
 builder.Services.AddScoped<ProductCategoryRepository>();
 builder.Services.AddScoped<ProductRepository>();
 builder.Services.AddScoped<StockTransactionRepository>();
+builder.Services.AddScoped<TaskRepository>();
+builder.Services.AddScoped<DailyNoteRepository>();
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AuthService>();
@@ -46,7 +49,10 @@ builder.Services.AddScoped<DivisionService>();
 builder.Services.AddScoped<PushNotificationService>();
 builder.Services.AddScoped<DebtService>();
 builder.Services.AddScoped<InventoryService>();
+builder.Services.AddScoped<TaskService>();
+builder.Services.AddScoped<DailyNoteService>();
 builder.Services.AddHostedService<NotificationSchedulerService>();
+builder.Services.AddHostedService<TaskCarryForwardService>();
 builder.Services.AddSingleton<DatabaseMigrator>();
 
 // ── Controllers with global ModuleAccessFilter ───────────────────────────────
@@ -100,7 +106,52 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title       = "BakeFix API",
+        Version     = "v1",
+        Description =
+            "REST API for **BakeFix** — a multi-tenant bakery bookkeeping platform.\n\n" +
+            "### Authentication\n" +
+            "All endpoints except `POST /auth/login` require a **Bearer JWT** token. " +
+            "Click **Authorize** and enter your token (without the `Bearer ` prefix).\n\n" +
+            "### Module access\n" +
+            "Endpoints tagged with a module name (Inventory, Debts, Wages, …) will return " +
+            "`403 Forbidden` if that module is not enabled for the caller's organisation."
+    });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name         = "Authorization",
+        Type         = SecuritySchemeType.Http,
+        Scheme       = "bearer",
+        BearerFormat = "JWT",
+        In           = ParameterLocation.Header,
+        Description  = "Paste the JWT token returned by POST /auth/login."
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id   = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+        options.IncludeXmlComments(xmlPath);
+});
 
 var app = builder.Build();
 

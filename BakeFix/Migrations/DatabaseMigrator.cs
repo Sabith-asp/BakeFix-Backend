@@ -1,5 +1,6 @@
 using MySql.Data.MySqlClient;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace BakeFix.Migrations
 {
@@ -9,6 +10,15 @@ namespace BakeFix.Migrations
         private readonly string _environment;
         private readonly bool _runMigrations;
         private readonly ILogger<DatabaseMigrator> _logger;
+
+        // MySQL error numbers that are safe to ignore (idempotent migrations)
+        private static readonly HashSet<int> IgnorableErrors = new()
+        {
+            1060, // Duplicate column name  (ADD COLUMN already exists)
+            1061, // Duplicate key name     (ADD INDEX already exists)
+            1091, // Can't DROP; check that column/key exists
+            1050, // Table already exists
+        };
 
         private const string BootstrapSql = @"
             CREATE TABLE IF NOT EXISTS SchemaVersions (
@@ -40,7 +50,7 @@ namespace BakeFix.Migrations
 
             using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
-            await ExecuteNonQueryAsync(connection, BootstrapSql);
+            await ExecuteStatementsAsync(connection, BootstrapSql);
 
             var applied   = await GetAppliedScriptsAsync(connection);
             var scriptDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
@@ -66,7 +76,7 @@ namespace BakeFix.Migrations
 
                 try
                 {
-                    await ExecuteNonQueryAsync(connection, sql);
+                    await ExecuteStatementsAsync(connection, sql);
                     await RecordAppliedAsync(connection, scriptName);
                     successCount++;
                     _logger.LogInformation("[Migrator] Applied: {Script}", scriptName);
@@ -80,6 +90,33 @@ namespace BakeFix.Migrations
 
             _logger.LogInformation("[Migrator] Completed — {Count} migration(s) applied in {Ms}ms.",
                 successCount, sw.ElapsedMilliseconds);
+        }
+
+        /// <summary>
+        /// Splits the SQL on semicolons and executes each statement individually.
+        /// Ignorable errors (duplicate column, can't drop non-existent key, etc.) are logged as warnings.
+        /// </summary>
+        private async Task ExecuteStatementsAsync(MySqlConnection connection, string sql)
+        {
+            // Split on semicolons, skip blank / comment-only lines
+            var statements = Regex.Split(sql, @";\s*(\r?\n|$)")
+                                  .Select(s => s.Trim())
+                                  .Where(s => s.Length > 0 && !s.StartsWith("--"))
+                                  .ToList();
+
+            foreach (var stmt in statements)
+            {
+                try
+                {
+                    using var cmd = new MySqlCommand(stmt, connection);
+                    cmd.CommandTimeout = 60;
+                    await cmd.ExecuteNonQueryAsync();
+                }
+                catch (MySqlException ex) when (IgnorableErrors.Contains(ex.Number))
+                {
+                    _logger.LogWarning("[Migrator] Skipped (already applied): {Msg}", ex.Message);
+                }
+            }
         }
 
         private static async Task<HashSet<string>> GetAppliedScriptsAsync(MySqlConnection connection)
@@ -98,13 +135,6 @@ namespace BakeFix.Migrations
             using var cmd = new MySqlCommand(query, connection);
             cmd.Parameters.AddWithValue("@scriptName", scriptName);
             cmd.Parameters.AddWithValue("@appliedBy",  _environment);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        private static async Task ExecuteNonQueryAsync(MySqlConnection connection, string sql)
-        {
-            using var cmd = new MySqlCommand(sql, connection);
-            cmd.CommandTimeout = 60;
             await cmd.ExecuteNonQueryAsync();
         }
     }

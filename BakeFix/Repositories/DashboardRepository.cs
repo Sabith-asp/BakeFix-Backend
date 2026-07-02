@@ -49,6 +49,8 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
+            var cutoff = _tenant.OrgLocalDate.AddMonths(-months);
+
             const string query = @"
                 SELECT
                     DATE_FORMAT(`Date`, '%Y-%m') AS Month,
@@ -58,31 +60,32 @@ namespace BakeFix.Repositories
                 FROM (
                     SELECT `Date`, Amount, 'income'  AS type FROM Incomes
                     WHERE OrganizationId = @orgId
-                      AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                      AND `Date` >= @cutoff
                       AND (@divisionId IS NULL OR DivisionId = @divisionId)
                     UNION ALL
                     SELECT `Date`, Amount, 'expense' AS type FROM Expenses
                     WHERE OrganizationId = @orgId
-                      AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                      AND `Date` >= @cutoff
                       AND (@divisionId IS NULL OR DivisionId = @divisionId)
                     UNION ALL
                     SELECT `Date`, Amount, 'wage'    AS type FROM Wages
                     WHERE OrganizationId = @orgId
-                      AND `Date` >= DATE_SUB(CURDATE(), INTERVAL @months MONTH)
+                      AND `Date` >= @cutoff
                       AND (@divisionId IS NULL OR DivisionId = @divisionId)
                 ) combined
                 GROUP BY Month
                 ORDER BY Month";
 
-            var rawData = (await connection.QueryAsync<TrendDataPoint>(query, new { orgId, months, divisionId }))
+            var rawData = (await connection.QueryAsync<TrendDataPoint>(query, new { orgId, cutoff, divisionId }))
                           .ToDictionary(r => r.Month);
 
             var result = new List<TrendDataPoint>();
             bool showYear = months > 6;
+            var orgNow = _tenant.OrgLocalNow;
 
             for (int i = months - 1; i >= 0; i--)
             {
-                var date = DateTime.Now.AddMonths(-i);
+                var date = orgNow.AddMonths(-i);
                 var key   = date.ToString("yyyy-MM");
                 var label = showYear ? date.ToString("MMM ''yy") : date.ToString("MMM");
 

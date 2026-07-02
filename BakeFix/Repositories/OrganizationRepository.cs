@@ -12,6 +12,7 @@ namespace BakeFix.Repositories
         Task SetActiveAsync(Guid id, bool isActive);
         Task<List<string>> GetEnabledModulesAsync(Guid orgId);
         Task SetModuleEnabledAsync(Guid orgId, string moduleName, bool enabled);
+        Task UpdateTimezoneAsync(Guid id, string timezone);
     }
 
     public class OrganizationRepository : IOrganizationRepository
@@ -28,7 +29,7 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             var orgs = (await connection.QueryAsync<Organization>(
-                "SELECT Id, Name, Slug, IsActive, CreatedAt FROM Organizations ORDER BY CreatedAt DESC"))
+                "SELECT Id, Name, Slug, IsActive, CreatedAt, Timezone FROM Organizations ORDER BY CreatedAt DESC"))
                 .ToList();
 
             if (!orgs.Any()) return orgs;
@@ -54,7 +55,7 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_conn);
 
             var org = await connection.QueryFirstOrDefaultAsync<Organization>(
-                "SELECT Id, Name, Slug, IsActive, CreatedAt FROM Organizations WHERE Id = @id",
+                "SELECT Id, Name, Slug, IsActive, CreatedAt, Timezone FROM Organizations WHERE Id = @id",
                 new { id });
 
             if (org is null) return null;
@@ -67,12 +68,12 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
 
-            org.Id = Guid.NewGuid();
+            org.Id       = Guid.NewGuid();
             org.IsActive = true;
             org.CreatedAt = DateTime.UtcNow;
 
             await connection.ExecuteAsync(
-                "INSERT INTO Organizations (Id, Name, Slug, IsActive, CreatedAt) VALUES (@Id, @Name, @Slug, @IsActive, @CreatedAt)",
+                "INSERT INTO Organizations (Id, Name, Slug, IsActive, CreatedAt, Timezone) VALUES (@Id, @Name, @Slug, @IsActive, @CreatedAt, @Timezone)",
                 org);
 
             // Income + Expenses are always enabled for every new org
@@ -81,10 +82,10 @@ namespace BakeFix.Repositories
                   SELECT @OrgId, Id, TRUE FROM Modules WHERE Name IN ('Income', 'Expenses')",
                 new { OrgId = org.Id });
 
-            // Wages, Employees, Divisions, Notifications, Debts, Inventory start disabled — SuperAdmin must enable them explicitly
+            // All other modules start disabled — SuperAdmin must enable them explicitly
             await connection.ExecuteAsync(
                 @"INSERT INTO OrganizationModules (OrganizationId, ModuleId, IsEnabled)
-                  SELECT @OrgId, Id, FALSE FROM Modules WHERE Name IN ('Wages', 'Employees', 'Divisions', 'Notifications', 'Debts', 'Inventory')",
+                  SELECT @OrgId, Id, FALSE FROM Modules WHERE Name IN ('Wages', 'Employees', 'Divisions', 'Notifications', 'Debts', 'Inventory', 'Tasks')",
                 new { OrgId = org.Id });
 
             org.EnabledModules = new List<string> { "Income", "Expenses" };
@@ -123,6 +124,14 @@ namespace BakeFix.Repositories
                   SET om.IsEnabled = @enabled
                   WHERE om.OrganizationId = @orgId AND m.Name = @moduleName",
                 new { orgId, moduleName, enabled });
+        }
+
+        public async Task UpdateTimezoneAsync(Guid id, string timezone)
+        {
+            using var connection = new MySqlConnection(_conn);
+            await connection.ExecuteAsync(
+                "UPDATE Organizations SET Timezone = @timezone WHERE Id = @id",
+                new { id, timezone });
         }
     }
 }

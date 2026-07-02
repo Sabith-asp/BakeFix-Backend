@@ -15,5 +15,6 @@
         public Guid? OrganizationId { get; set; }
         public string OrganizationName { get; set; } = "";
         public List<string> EnabledModules { get; set; } = new();
+        public string OrganizationTimezone { get; set; } = "";
     }
 }

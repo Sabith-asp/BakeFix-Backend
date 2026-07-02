@@ -85,5 +85,26 @@ namespace BakeFix.Repositories
             using var connection = new MySqlConnection(_connectionString);
             return await connection.QueryFirstOrDefaultAsync<User>(query, new { Username = username });
         }
+
+        public async Task<User?> GetUserByIdAsync(Guid id)
+        {
+            const string query = @"
+                SELECT u.Id,
+                       u.Username,
+                       u.Password,
+                       u.PasswordHash,
+                       u.OrganizationId,
+                       u.RoleId,
+                       r.Name        AS Role,
+                       o.Name        AS OrganizationName,
+                       o.IsActive    AS OrgIsActive
+                FROM UsersOfBakeFix u
+                LEFT JOIN Roles r ON r.Id = u.RoleId
+                LEFT JOIN Organizations o ON o.Id = u.OrganizationId
+                WHERE u.Id = @id";
+
+            using var connection = new MySqlConnection(_connectionString);
+            return await connection.QueryFirstOrDefaultAsync<User>(query, new { id });
+        }
     }
 }

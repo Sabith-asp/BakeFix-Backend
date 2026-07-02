@@ -20,12 +20,12 @@ namespace BakeFix.Services
             _config = config;
         }
 
-        public async Task<(bool Success, string? ErrorMessage, User? User, string? Token, string OrgName, List<string> Modules)>
+        public async Task<(bool Success, string? ErrorMessage, User? User, string? Token, string OrgName, List<string> Modules, string Timezone)>
             LoginAsync(string username, string password)
         {
             var user = await _userRepo.GetUserByUsernameAsync(username);
             if (user == null)
-                return (false, "Invalid credentials", null, null, "", new());
+                return (false, "Invalid credentials", null, null, "", new(), "");
 
             // Detect legacy rows: PasswordHash holds plain text (doesn't start with $2)
             bool isLegacy = !user.PasswordHash.StartsWith("$2");
@@ -49,19 +49,24 @@ namespace BakeFix.Services
             }
 
             if (!passwordValid)
-                return (false, "Invalid credentials", null, null, "", new());
+                return (false, "Invalid credentials", null, null, "", new(), "");
 
             // Org users whose organization is suspended cannot log in
             if (user.OrganizationId.HasValue && user.OrgIsActive == false)
-                return (false, "Your organization account has been suspended.", null, null, "", new());
+                return (false, "Your organization account has been suspended.", null, null, "", new(), "");
 
-            var modules = user.OrganizationId.HasValue
-                ? await _orgRepo.GetEnabledModulesAsync(user.OrganizationId.Value)
-                : new List<string>();
+            string timezone = "UTC";
+            List<string> modules = new();
+            if (user.OrganizationId.HasValue)
+            {
+                modules  = await _orgRepo.GetEnabledModulesAsync(user.OrganizationId.Value);
+                var org  = await _orgRepo.GetByIdAsync(user.OrganizationId.Value);
+                timezone = org?.Timezone ?? "Asia/Kolkata";
+            }
 
             var token = GenerateJwtToken(user);
 
-            return (true, null, user, token, user.OrganizationName ?? "", modules);
+            return (true, null, user, token, user.OrganizationName ?? "", modules, timezone);
         }
 
         private string GenerateJwtToken(User user)

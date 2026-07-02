@@ -8,5 +8,6 @@ namespace BakeFix.Models
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<string> EnabledModules { get; set; } = new();
+        public string Timezone { get; set; } = "Asia/Kolkata";
     }
 }
