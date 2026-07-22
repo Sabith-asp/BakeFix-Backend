@@ -32,11 +32,12 @@ builder.Services.AddScoped<DivisionRepository>();
 builder.Services.AddScoped<PushSubscriptionRepository>();
 builder.Services.AddScoped<NotificationSettingsRepository>();
 builder.Services.AddScoped<DebtRepository>();
+builder.Services.AddScoped<TaskRepository>();
+builder.Services.AddScoped<DailyNoteRepository>();
 builder.Services.AddScoped<ProductCategoryRepository>();
 builder.Services.AddScoped<ProductRepository>();
 builder.Services.AddScoped<StockTransactionRepository>();
-builder.Services.AddScoped<TaskRepository>();
-builder.Services.AddScoped<DailyNoteRepository>();
+builder.Services.AddScoped<PrayerRepository>();
 
 // ── Services ─────────────────────────────────────────────────────────────────
 builder.Services.AddScoped<AuthService>();
@@ -48,11 +49,13 @@ builder.Services.AddScoped<WageService>();
 builder.Services.AddScoped<DivisionService>();
 builder.Services.AddScoped<PushNotificationService>();
 builder.Services.AddScoped<DebtService>();
-builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<DailyNoteService>();
+builder.Services.AddScoped<InventoryService>();
+builder.Services.AddScoped<PrayerService>();
 builder.Services.AddHostedService<NotificationSchedulerService>();
 builder.Services.AddHostedService<TaskCarryForwardService>();
+builder.Services.AddHostedService<PrayerSchedulerService>();
 builder.Services.AddSingleton<DatabaseMigrator>();
 
 // ── Controllers with global ModuleAccessFilter ───────────────────────────────
@@ -178,10 +181,12 @@ app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
         _                           => StatusCodes.Status500InternalServerError
     };
 
+    var isDev = app.Environment.IsDevelopment();
     var message = ex switch
     {
         UnauthorizedAccessException => ex.Message,
         ArgumentException           => ex.Message,
+        _ when isDev                => $"{ex?.GetType().Name}: {ex?.Message}",
         _                           => "An unexpected error occurred."
     };
 

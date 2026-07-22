@@ -61,5 +61,13 @@ namespace BakeFix.Repositories
                 "SELECT COUNT(1) FROM PushSubscriptions WHERE OrgId = @orgId",
                 new { orgId });
         }
+
+        public async Task<IEnumerable<Models.PushSubscription>> GetByUserIdAsync(Guid userId)
+        {
+            using var connection = new MySqlConnection(_conn);
+            return await connection.QueryAsync<Models.PushSubscription>(
+                "SELECT * FROM PushSubscriptions WHERE UserId = @userId",
+                new { userId });
+        }
     }
 }

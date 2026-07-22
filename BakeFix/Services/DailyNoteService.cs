@@ -12,37 +12,38 @@ namespace BakeFix.Services
             _repo = repo;
         }
 
-        public async Task<(IEnumerable<DailyNote> Personal, IEnumerable<DailyNote> OrgNotes)>
-            GetByDateAsync(DateTime date)
-        {
-            var personal = await _repo.GetPersonalByDateAsync(date);
-            var orgNotes = await _repo.GetOrgNotesByDateAsync(date);
-            return (personal, orgNotes);
-        }
+        public Task<DailyNote?> GetPersonalByDateAsync(DateTime date)
+            => _repo.GetPersonalByDateAsync(date);
 
-        public async Task<DailyNote> CreateAsync(DateTime noteDate, string content, string? title, string visibility)
+        public Task<IEnumerable<DailyNote>> GetOrgNotesByDateAsync(DateTime date)
+            => _repo.GetOrgNotesByDateAsync(date);
+
+        public Task<IEnumerable<DailyNote>> GetRecentPersonalAsync(int limit = 7)
+            => _repo.GetRecentPersonalAsync(limit);
+
+        public async Task<DailyNote> UpsertAsync(string dateStr, UpsertNoteRequest request)
         {
-            if (string.IsNullOrWhiteSpace(content))
-                throw new ArgumentException("Content cannot be empty.");
+            if (string.IsNullOrWhiteSpace(request.Content))
+                throw new ArgumentException("Note content cannot be empty.");
+            if (!DateTime.TryParse(dateStr, out var date))
+                throw new ArgumentException("Invalid date.");
 
             var note = new DailyNote
             {
-                NoteDate   = noteDate,
-                Content    = content.Trim(),
-                Title      = string.IsNullOrWhiteSpace(title) ? null : title.Trim(),
-                Visibility = visibility is "Personal" or "Organisation" ? visibility : "Personal",
+                Id        = Guid.NewGuid(),
+                NoteDate  = date,
+                Content   = request.Content.Trim(),
+                Visibility = request.Visibility == "Organisation" ? "Organisation" : "Personal",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
-            return await _repo.CreateAsync(note);
+
+            return request.Visibility == "Organisation"
+                ? await _repo.UpsertOrgAsync(note)
+                : await _repo.UpsertPersonalAsync(note);
         }
 
-        public async Task<DailyNote?> UpdateAsync(Guid id, string content, string? title)
-        {
-            if (string.IsNullOrWhiteSpace(content))
-                throw new ArgumentException("Content cannot be empty.");
-
-            return await _repo.UpdateAsync(id, content.Trim(), string.IsNullOrWhiteSpace(title) ? null : title.Trim());
-        }
-
-        public async Task<bool> DeleteAsync(Guid id) => await _repo.DeleteAsync(id);
+        public Task<bool> DeletePersonalByDateAsync(DateTime date)
+            => _repo.DeletePersonalByDateAsync(date);
     }
 }

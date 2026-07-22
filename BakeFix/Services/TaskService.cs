@@ -194,6 +194,34 @@ namespace BakeFix.Services
             return updated;
         }
 
+
+        public async Task<bool> ChangePriorityAsync(Guid id, string priority)
+        {
+            var valid = new[] { "High", "Medium", "Low" };
+            if (!valid.Contains(priority))
+                throw new ArgumentException("Invalid priority value.");
+
+            var existing = await _repo.GetByIdAsync(id)
+                ?? throw new ArgumentException("Task not found.");
+
+            var updated = await _repo.ChangePriorityAsync(id, priority);
+            if (updated && existing.Priority != priority)
+            {
+                await _repo.LogActivityAsync(new TaskActivity
+                {
+                    Id                  = Guid.NewGuid(),
+                    TaskId              = id,
+                    PerformedByUserId   = _tenant.RequiredUserId,
+                    PerformedByUsername = _tenant.Username,
+                    ActivityType        = "PriorityChanged",
+                    OldValue            = existing.Priority,
+                    NewValue            = priority,
+                    CreatedAt           = DateTime.UtcNow
+                });
+            }
+            return updated;
+        }
+
         public async Task AddCommentAsync(Guid id, string comment)
         {
             if (string.IsNullOrWhiteSpace(comment))

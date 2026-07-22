@@ -111,6 +111,16 @@ namespace BakeFix.Controllers
             return NoContent();
         }
 
+
+        // PATCH /tasks/{id}/priority
+        [HttpPatch("{id:guid}/priority")]
+        public async Task<IActionResult> ChangePriority(Guid id, [FromBody] ChangePriorityRequest request)
+        {
+            var updated = await _taskService.ChangePriorityAsync(id, request.Priority);
+            if (!updated) return NotFound(new { message = "Task not found or access denied." });
+            return NoContent();
+        }
+
         // POST /tasks/{id}/comments
         [HttpPost("{id:guid}/comments")]
         public async Task<IActionResult> AddComment(Guid id, [FromBody] AddCommentRequest request)
@@ -121,42 +131,42 @@ namespace BakeFix.Controllers
 
         // ── Daily Notes ──────────────────────────────────────────────────────
 
-        // GET /tasks/notes/{date}
+        // GET /tasks/notes/{date}?includeOrg=true
         [HttpGet("notes/{date}")]
-        public async Task<IActionResult> GetNotes(string date)
+        public async Task<IActionResult> GetNotes(string date, [FromQuery] bool includeOrg = true)
         {
             if (!DateTime.TryParse(date, out var parsedDate))
                 return BadRequest(new { message = "Invalid date format." });
 
-            var (personal, orgNotes) = await _noteService.GetByDateAsync(parsedDate);
+            var personal = await _noteService.GetPersonalByDateAsync(parsedDate);
+            var orgNotes = includeOrg
+                ? (await _noteService.GetOrgNotesByDateAsync(parsedDate)).ToList()
+                : new List<DailyNote>();
+
             return Ok(new { personal, orgNotes });
         }
 
-        // POST /tasks/notes
-        [HttpPost("notes")]
-        public async Task<IActionResult> CreateNote([FromBody] CreateNoteRequest request)
+        // GET /tasks/notes/recent
+        [HttpGet("notes/recent")]
+        public async Task<IActionResult> GetRecentNotes([FromQuery] int limit = 7)
+            => Ok(await _noteService.GetRecentPersonalAsync(limit));
+
+        // PUT /tasks/notes/{date}
+        [HttpPut("notes/{date}")]
+        public async Task<IActionResult> UpsertNote(string date, [FromBody] UpsertNoteRequest request)
         {
-            if (!DateTime.TryParse(request.NoteDate, out var noteDate))
-                return BadRequest(new { message = "Invalid date." });
-            var note = await _noteService.CreateAsync(noteDate, request.Content, request.Title, request.Visibility);
+            var note = await _noteService.UpsertAsync(date, request);
             return Ok(note);
         }
 
-        // PUT /tasks/notes/{id}
-        [HttpPut("notes/{id:guid}")]
-        public async Task<IActionResult> UpdateNote(Guid id, [FromBody] UpdateNoteRequest request)
+        // DELETE /tasks/notes/{date}
+        [HttpDelete("notes/{date}")]
+        public async Task<IActionResult> DeleteNote(string date)
         {
-            var note = await _noteService.UpdateAsync(id, request.Content, request.Title);
-            if (note is null) return NotFound();
-            return Ok(note);
-        }
-
-        // DELETE /tasks/notes/{id}
-        [HttpDelete("notes/{id:guid}")]
-        public async Task<IActionResult> DeleteNote(Guid id)
-        {
-            var deleted = await _noteService.DeleteAsync(id);
-            return deleted ? NoContent() : NotFound();
+            if (!DateTime.TryParse(date, out var parsedDate))
+                return BadRequest(new { message = "Invalid date format." });
+            await _noteService.DeletePersonalByDateAsync(parsedDate);
+            return NoContent();
         }
     }
 }

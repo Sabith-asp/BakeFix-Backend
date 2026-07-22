@@ -21,11 +21,22 @@ namespace BakeFix.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            // Catch up immediately on startup — otherwise a server restart shortly after
+            // a missed local midnight leaves already-overdue tasks stuck until the next
+            // scheduled run, up to 24h later.
+            try
+            {
+                await RunCarryForwardAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[CarryForward] Error during startup catch-up run.");
+            }
+
             while (!stoppingToken.IsCancellationRequested)
             {
-                var now         = DateTime.UtcNow;
-                var nextMidnight = now.Date.AddDays(1);
-                var delay        = nextMidnight - now;
+                var nextMidnightUtc = BusinessTime.NextMidnightUtc();
+                var delay = nextMidnightUtc - DateTime.UtcNow;
 
                 _logger.LogInformation("[CarryForward] Next run in {Minutes} minutes.", (int)delay.TotalMinutes);
                 await Task.Delay(delay, stoppingToken);
@@ -46,7 +57,7 @@ namespace BakeFix.Services
         private async Task RunCarryForwardAsync()
         {
             var connString = _config.GetConnectionString("DefaultConnection")!;
-            var today      = DateTime.UtcNow.Date;
+            var today      = BusinessTime.Today;
 
             // Use a plain repo instance without tenant context for cross-org operation
             using var scope = _scopeFactory.CreateScope();

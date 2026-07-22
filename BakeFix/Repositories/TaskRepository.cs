@@ -243,6 +243,23 @@ namespace BakeFix.Repositories
             return rows > 0;
         }
 
+
+        public async Task<bool> ChangePriorityAsync(Guid id, string priority)
+        {
+            using var connection = new MySqlConnection(_conn);
+            var orgId  = _tenant.RequiredOrgId;
+            var userId = _tenant.RequiredUserId;
+
+            // Org tasks can be re-prioritised by any org member; personal tasks only by creator
+            int rows = await connection.ExecuteAsync(
+                @"UPDATE Tasks
+                  SET Priority = @priority, UpdatedAt = @now
+                  WHERE Id = @id AND OrganizationId = @orgId AND DeletedAt IS NULL
+                    AND (Visibility = 'Organisation' OR CreatedByUserId = @userId OR AssignedToUserId = @userId)",
+                new { priority, now = DateTime.UtcNow, id, orgId, userId });
+            return rows > 0;
+        }
+
         public async Task<bool> DeleteAsync(Guid id)
         {
             using var connection = new MySqlConnection(_conn);

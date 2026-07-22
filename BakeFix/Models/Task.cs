@@ -87,22 +87,20 @@ namespace BakeFix.Models
         public string Visibility { get; set; } = "Personal";
     }
 
+
+    public class ChangePriorityRequest
+    {
+        public string Priority { get; set; } = "Medium";
+    }
+
     public class AddCommentRequest
     {
         public string Comment { get; set; } = "";
     }
 
-    public class CreateNoteRequest
-    {
-        public string NoteDate   { get; set; } = "";
-        public string Content    { get; set; } = "";
-        public string? Title     { get; set; }
-        public string Visibility { get; set; } = "Personal";
-    }
-
-    public class UpdateNoteRequest
+    public class UpsertNoteRequest
     {
         public string Content { get; set; } = "";
-        public string? Title  { get; set; }
+        public string Visibility { get; set; } = "Personal";
     }
 }

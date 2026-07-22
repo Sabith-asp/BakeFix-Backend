@@ -85,7 +85,7 @@ namespace BakeFix.Repositories
             // All other modules start disabled — SuperAdmin must enable them explicitly
             await connection.ExecuteAsync(
                 @"INSERT INTO OrganizationModules (OrganizationId, ModuleId, IsEnabled)
-                  SELECT @OrgId, Id, FALSE FROM Modules WHERE Name IN ('Wages', 'Employees', 'Divisions', 'Notifications', 'Debts', 'Inventory', 'Tasks')",
+                  SELECT @OrgId, Id, FALSE FROM Modules WHERE Name IN ('Wages', 'Employees', 'Divisions', 'Notifications', 'Debts', 'Inventory', 'Tasks', 'Prayer')",
                 new { OrgId = org.Id });
 
             org.EnabledModules = new List<string> { "Income", "Expenses" };

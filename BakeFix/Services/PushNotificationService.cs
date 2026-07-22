@@ -35,6 +35,13 @@ namespace BakeFix.Services
             await SendAsync(new[] { sub }, payload);
         }
 
+        public async Task SendToSubscriptionsByUserAsync(Guid userId, string title, string body, string url = "/")
+        {
+            var subscriptions = await _subRepo.GetByUserIdAsync(userId);
+            var payload = JsonSerializer.Serialize(new { title, body, url });
+            await SendAsync(subscriptions, payload);
+        }
+
         private async Task SendAsync(IEnumerable<Models.PushSubscription> subscriptions, string payload)
         {
             var subject    = _config["Vapid:Subject"]    ?? "";

@@ -16,17 +16,15 @@ namespace BakeFix.Repositories
             _tenant = tenant;
         }
 
-        private const string Cols = @"Id, OrganizationId, CreatedByUserId, CreatedByUsername,
-                                      NoteDate, Title, Content, Visibility, CreatedAt, UpdatedAt";
-
-        public async Task<IEnumerable<DailyNote>> GetPersonalByDateAsync(DateTime date)
+        public async Task<DailyNote?> GetPersonalByDateAsync(DateTime date)
         {
             using var connection = new MySqlConnection(_conn);
-            return await connection.QueryAsync<DailyNote>(
-                $@"SELECT {Cols} FROM DailyNotes
-                   WHERE OrganizationId = @orgId AND CreatedByUserId = @userId
-                     AND NoteDate = @date AND Visibility = 'Personal'
-                   ORDER BY CreatedAt ASC",
+            return await connection.QueryFirstOrDefaultAsync<DailyNote>(
+                @"SELECT Id, OrganizationId, CreatedByUserId, CreatedByUsername,
+                         NoteDate, Content, Visibility, CreatedAt, UpdatedAt
+                  FROM DailyNotes
+                  WHERE OrganizationId = @orgId AND CreatedByUserId = @userId
+                    AND NoteDate = @date AND Visibility = 'Personal'",
                 new { orgId = _tenant.RequiredOrgId, userId = _tenant.RequiredUserId, date });
         }
 
@@ -34,53 +32,77 @@ namespace BakeFix.Repositories
         {
             using var connection = new MySqlConnection(_conn);
             return await connection.QueryAsync<DailyNote>(
-                $@"SELECT {Cols} FROM DailyNotes
-                   WHERE OrganizationId = @orgId AND NoteDate = @date AND Visibility = 'Organisation'
-                   ORDER BY CreatedAt ASC",
+                @"SELECT Id, OrganizationId, CreatedByUserId, CreatedByUsername,
+                         NoteDate, Content, Visibility, CreatedAt, UpdatedAt
+                  FROM DailyNotes
+                  WHERE OrganizationId = @orgId AND NoteDate = @date AND Visibility = 'Organisation'
+                  ORDER BY CreatedAt ASC",
                 new { orgId = _tenant.RequiredOrgId, date });
         }
 
-        public async Task<DailyNote> CreateAsync(DailyNote note)
+        public async Task<IEnumerable<DailyNote>> GetRecentPersonalAsync(int limit)
         {
             using var connection = new MySqlConnection(_conn);
-            note.Id                = Guid.NewGuid();
+            return await connection.QueryAsync<DailyNote>(
+                @"SELECT Id, CreatedByUserId, CreatedByUsername, NoteDate, Content, Visibility, CreatedAt, UpdatedAt
+                  FROM DailyNotes
+                  WHERE OrganizationId = @orgId AND CreatedByUserId = @userId AND Visibility = 'Personal'
+                  ORDER BY NoteDate DESC
+                  LIMIT @limit",
+                new { orgId = _tenant.RequiredOrgId, userId = _tenant.RequiredUserId, limit });
+        }
+
+        public async Task<DailyNote> UpsertPersonalAsync(DailyNote note)
+        {
+            using var connection = new MySqlConnection(_conn);
             note.OrganizationId    = _tenant.RequiredOrgId;
             note.CreatedByUserId   = _tenant.RequiredUserId;
             note.CreatedByUsername = _tenant.Username;
-            note.CreatedAt         = DateTime.UtcNow;
-            note.UpdatedAt         = DateTime.UtcNow;
 
             await connection.ExecuteAsync(
                 @"INSERT INTO DailyNotes
                     (Id, OrganizationId, CreatedByUserId, CreatedByUsername,
-                     NoteDate, Title, Content, Visibility, CreatedAt, UpdatedAt)
+                     NoteDate, Content, Visibility, CreatedAt, UpdatedAt)
                   VALUES
                     (@Id, @OrganizationId, @CreatedByUserId, @CreatedByUsername,
-                     @NoteDate, @Title, @Content, @Visibility, @CreatedAt, @UpdatedAt)",
+                     @NoteDate, @Content, @Visibility, @CreatedAt, @UpdatedAt)
+                  ON DUPLICATE KEY UPDATE
+                    Content   = VALUES(Content),
+                    UpdatedAt = VALUES(UpdatedAt)",
                 note);
             return note;
         }
 
-        public async Task<DailyNote?> UpdateAsync(Guid id, string content, string? title)
+        public async Task<DailyNote> UpsertOrgAsync(DailyNote note)
         {
             using var connection = new MySqlConnection(_conn);
-            await connection.ExecuteAsync(
-                @"UPDATE DailyNotes SET Content = @content, Title = @title, UpdatedAt = @now
-                  WHERE Id = @id AND CreatedByUserId = @userId AND OrganizationId = @orgId",
-                new { id, content, title, now = DateTime.UtcNow,
-                      userId = _tenant.RequiredUserId, orgId = _tenant.RequiredOrgId });
+            note.OrganizationId    = _tenant.RequiredOrgId;
+            note.CreatedByUserId   = _tenant.RequiredUserId;
+            note.CreatedByUsername = _tenant.Username;
+            note.Visibility        = "Organisation";
 
-            return await connection.QueryFirstOrDefaultAsync<DailyNote>(
-                $"SELECT {Cols} FROM DailyNotes WHERE Id = @id", new { id });
+            await connection.ExecuteAsync(
+                @"INSERT INTO DailyNotes
+                    (Id, OrganizationId, CreatedByUserId, CreatedByUsername,
+                     NoteDate, Content, Visibility, CreatedAt, UpdatedAt)
+                  VALUES
+                    (@Id, @OrganizationId, @CreatedByUserId, @CreatedByUsername,
+                     @NoteDate, @Content, @Visibility, @CreatedAt, @UpdatedAt)
+                  ON DUPLICATE KEY UPDATE
+                    Content   = VALUES(Content),
+                    UpdatedAt = VALUES(UpdatedAt)",
+                note);
+            return note;
         }
 
-        public async Task<bool> DeleteAsync(Guid id)
+        public async Task<bool> DeletePersonalByDateAsync(DateTime date)
         {
             using var connection = new MySqlConnection(_conn);
             int rows = await connection.ExecuteAsync(
-                @"DELETE FROM DailyNotes WHERE Id = @id
-                  AND CreatedByUserId = @userId AND OrganizationId = @orgId",
-                new { id, userId = _tenant.RequiredUserId, orgId = _tenant.RequiredOrgId });
+                @"DELETE FROM DailyNotes
+                  WHERE OrganizationId = @orgId AND CreatedByUserId = @userId
+                    AND NoteDate = @date AND Visibility = 'Personal'",
+                new { orgId = _tenant.RequiredOrgId, userId = _tenant.RequiredUserId, date });
             return rows > 0;
         }
     }
