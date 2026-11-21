@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -18,7 +18,7 @@ namespace BakeFix.Repositories
 
         public async Task<PrayerOrgSettings> GetOrgSettingsAsync(Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var settings = await connection.QueryFirstOrDefaultAsync<PrayerOrgSettings>(
                 "SELECT * FROM PrayerOrgSettings WHERE OrganizationId = @orgId",
                 new { orgId });
@@ -32,21 +32,22 @@ namespace BakeFix.Repositories
                 OrganizationId = orgId
             };
             await connection.ExecuteAsync(
-                @"INSERT IGNORE INTO PrayerOrgSettings
+                @"INSERT INTO PrayerOrgSettings
                   (Id, OrganizationId, Latitude, Longitude, Timezone, CalculationMethod, AsrMethod, FajrAngle, IshaAngle)
-                  VALUES (@Id, @OrganizationId, @Latitude, @Longitude, @Timezone, @CalculationMethod, @AsrMethod, @FajrAngle, @IshaAngle)",
+                  VALUES (@Id, @OrganizationId, @Latitude, @Longitude, @Timezone, @CalculationMethod, @AsrMethod, @FajrAngle, @IshaAngle)
+                  ON CONFLICT (OrganizationId) DO NOTHING",
                 defaults);
             return defaults;
         }
 
         public async Task UpsertOrgSettingsAsync(PrayerOrgSettings s)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 @"INSERT INTO PrayerOrgSettings
                   (Id, OrganizationId, Latitude, Longitude, Timezone, CalculationMethod, AsrMethod, FajrAngle, IshaAngle)
                   VALUES (@Id, @OrganizationId, @Latitude, @Longitude, @Timezone, @CalculationMethod, @AsrMethod, @FajrAngle, @IshaAngle)
-                  ON DUPLICATE KEY UPDATE
+                  ON CONFLICT (OrganizationId) DO UPDATE SET
                     Latitude = @Latitude, Longitude = @Longitude, Timezone = @Timezone,
                     CalculationMethod = @CalculationMethod, AsrMethod = @AsrMethod,
                     FajrAngle = @FajrAngle, IshaAngle = @IshaAngle",
@@ -57,7 +58,7 @@ namespace BakeFix.Repositories
 
         public async Task<PrayerUserSettings?> GetUserSettingsAsync(Guid userId, Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryFirstOrDefaultAsync<PrayerUserSettings>(
                 "SELECT * FROM PrayerUserSettings WHERE UserId = @userId AND OrganizationId = @orgId",
                 new { userId, orgId });
@@ -65,11 +66,11 @@ namespace BakeFix.Repositories
 
         public async Task UpsertUserSettingsAsync(PrayerUserSettings s)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 @"INSERT INTO PrayerUserSettings (Id, OrganizationId, UserId, Latitude, Longitude, Timezone, CityName)
                   VALUES (@Id, @OrganizationId, @UserId, @Latitude, @Longitude, @Timezone, @CityName)
-                  ON DUPLICATE KEY UPDATE
+                  ON CONFLICT (OrganizationId, UserId) DO UPDATE SET
                     Latitude = @Latitude, Longitude = @Longitude,
                     Timezone = @Timezone, CityName = @CityName",
                 s);
@@ -77,7 +78,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<PrayerUserSettings>> GetAllUserSettingsByOrgAsync(Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerUserSettings>(
                 "SELECT * FROM PrayerUserSettings WHERE OrganizationId = @orgId",
                 new { orgId });
@@ -89,16 +90,18 @@ namespace BakeFix.Repositories
             Guid userId, string username, Guid orgId,
             DateTime localDate, CalculatedPrayerTimes times)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             foreach (var name in PrayerNames.All)
             {
                 await connection.ExecuteAsync(
                     @"INSERT INTO PrayerRecords
                       (Id, OrganizationId, UserId, Username, PrayerName, PrayerDate, PrayerTime, PrayerEndTime, Status)
                       VALUES (@Id, @OrganizationId, @UserId, @Username, @PrayerName, @PrayerDate, @PrayerTime, @PrayerEndTime, 'Upcoming')
-                      ON DUPLICATE KEY UPDATE
-                        PrayerTime    = IF(Status IN ('Upcoming','ReminderSent'), VALUES(PrayerTime), PrayerTime),
-                        PrayerEndTime = IF(Status IN ('Upcoming','ReminderSent'), VALUES(PrayerEndTime), PrayerEndTime)",
+                      ON CONFLICT (OrganizationId, UserId, PrayerName, PrayerDate) DO UPDATE SET
+                        PrayerTime    = CASE WHEN PrayerRecords.Status IN ('Upcoming','ReminderSent')
+                                             THEN EXCLUDED.PrayerTime ELSE PrayerRecords.PrayerTime END,
+                        PrayerEndTime = CASE WHEN PrayerRecords.Status IN ('Upcoming','ReminderSent')
+                                             THEN EXCLUDED.PrayerEndTime ELSE PrayerRecords.PrayerEndTime END",
                     new
                     {
                         Id             = Guid.NewGuid(),
@@ -115,7 +118,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<PrayerRecord>> GetRecordsByDateAsync(Guid userId, Guid orgId, DateTime localDate)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerRecord>(
                 @"SELECT * FROM PrayerRecords
                   WHERE OrganizationId = @orgId AND UserId = @userId AND PrayerDate = @localDate
@@ -126,7 +129,7 @@ namespace BakeFix.Repositories
         public async Task<IEnumerable<PrayerRecord>> GetRecordsByDateRangeAsync(
             Guid userId, Guid orgId, DateTime from, DateTime to)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerRecord>(
                 @"SELECT * FROM PrayerRecords
                   WHERE OrganizationId = @orgId AND UserId = @userId
@@ -137,7 +140,7 @@ namespace BakeFix.Repositories
 
         public async Task<PrayerRecord?> GetRecordByIdAsync(Guid id, Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryFirstOrDefaultAsync<PrayerRecord>(
                 "SELECT * FROM PrayerRecords WHERE Id = @id AND OrganizationId = @orgId",
                 new { id, orgId });
@@ -148,7 +151,7 @@ namespace BakeFix.Repositories
             Guid? updatedByUserId, string? updatedByUsername,
             string? notes, string? congregationType)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             int rows = await connection.ExecuteAsync(
                 @"UPDATE PrayerRecords
                   SET Status = @status,
@@ -165,7 +168,7 @@ namespace BakeFix.Repositories
         // Used by scheduler — no tenant context needed
         public async Task<int> TransitionStatusAsync(Guid id, string expectedStatus, string newStatus)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.ExecuteAsync(
                 "UPDATE PrayerRecords SET Status = @newStatus WHERE Id = @id AND Status = @expectedStatus",
                 new { id, expectedStatus, newStatus });
@@ -173,7 +176,7 @@ namespace BakeFix.Repositories
 
         public async Task LogStatusHistoryAsync(PrayerStatusHistory history)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 @"INSERT INTO PrayerStatusHistory
                   (Id, PrayerRecordId, OldStatus, NewStatus, ChangedByUserId, ChangedByUsername, Note, ChangedAt)
@@ -183,7 +186,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<PrayerStatusHistory>> GetHistoryByRecordAsync(Guid recordId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerStatusHistory>(
                 "SELECT * FROM PrayerStatusHistory WHERE PrayerRecordId = @recordId ORDER BY ChangedAt ASC",
                 new { recordId });
@@ -193,7 +196,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<PrayerReminderConfig>> GetReminderConfigsAsync(Guid userId, Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerReminderConfig>(
                 "SELECT * FROM PrayerReminderConfigs WHERE UserId = @userId AND OrganizationId = @orgId ORDER BY PrayerName, MinutesOffset",
                 new { userId, orgId });
@@ -201,18 +204,18 @@ namespace BakeFix.Repositories
 
         public async Task UpsertReminderConfigAsync(PrayerReminderConfig cfg)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 @"INSERT INTO PrayerReminderConfigs
                   (Id, OrganizationId, UserId, PrayerName, ReminderType, MinutesOffset, IsEnabled)
                   VALUES (@Id, @OrganizationId, @UserId, @PrayerName, @ReminderType, @MinutesOffset, @IsEnabled)
-                  ON DUPLICATE KEY UPDATE IsEnabled = @IsEnabled",
+                  ON CONFLICT (UserId, PrayerName, ReminderType) DO UPDATE SET IsEnabled = @IsEnabled",
                 cfg);
         }
 
         public async Task EnsureDefaultRemindersAsync(Guid userId, Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             int count = await connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM PrayerReminderConfigs WHERE UserId = @userId AND OrganizationId = @orgId",
                 new { userId, orgId });
@@ -223,9 +226,10 @@ namespace BakeFix.Repositories
             foreach (var cfg in defaults)
             {
                 await connection.ExecuteAsync(
-                    @"INSERT IGNORE INTO PrayerReminderConfigs
+                    @"INSERT INTO PrayerReminderConfigs
                       (Id, OrganizationId, UserId, PrayerName, ReminderType, MinutesOffset, IsEnabled)
-                      VALUES (@Id, @OrganizationId, @UserId, @PrayerName, @ReminderType, @MinutesOffset, @IsEnabled)",
+                      VALUES (@Id, @OrganizationId, @UserId, @PrayerName, @ReminderType, @MinutesOffset, @IsEnabled)
+                      ON CONFLICT (UserId, PrayerName, ReminderType) DO NOTHING",
                     cfg);
             }
         }
@@ -273,9 +277,9 @@ namespace BakeFix.Repositories
         // All enabled reminder configs across org (used by scheduler)
         public async Task<IEnumerable<PrayerReminderConfig>> GetEnabledRemindersByOrgAsync(Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerReminderConfig>(
-                "SELECT * FROM PrayerReminderConfigs WHERE OrganizationId = @orgId AND IsEnabled = 1",
+                "SELECT * FROM PrayerReminderConfigs WHERE OrganizationId = @orgId AND IsEnabled = TRUE",
                 new { orgId });
         }
 
@@ -283,7 +287,7 @@ namespace BakeFix.Repositories
 
         public async Task<PrayerStreak?> GetStreakAsync(Guid userId, Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryFirstOrDefaultAsync<PrayerStreak>(
                 "SELECT * FROM PrayerStreaks WHERE UserId = @userId AND OrganizationId = @orgId",
                 new { userId, orgId });
@@ -291,14 +295,14 @@ namespace BakeFix.Repositories
 
         public async Task UpsertStreakAsync(PrayerStreak streak)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 @"INSERT INTO PrayerStreaks
                   (Id, OrganizationId, UserId, CurrentStreak, LongestStreak, LastStreakDate,
                    TotalPrayersCompleted, TotalPrayersOnTime)
                   VALUES (@Id, @OrganizationId, @UserId, @CurrentStreak, @LongestStreak,
                           @LastStreakDate, @TotalPrayersCompleted, @TotalPrayersOnTime)
-                  ON DUPLICATE KEY UPDATE
+                  ON CONFLICT (OrganizationId, UserId) DO UPDATE SET
                     CurrentStreak         = @CurrentStreak,
                     LongestStreak         = @LongestStreak,
                     LastStreakDate         = @LastStreakDate,
@@ -311,26 +315,28 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<Guid>> GetOrgsWithPrayerModuleAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<Guid>(
                 @"SELECT om.OrganizationId
                   FROM OrganizationModules om
                   JOIN Modules m ON m.Id = om.ModuleId
-                  WHERE m.Name = 'Prayer' AND om.IsEnabled = 1");
+                  WHERE m.Name = 'Prayer' AND om.IsEnabled = TRUE");
         }
 
         public async Task<IEnumerable<(Guid Id, string Username)>> GetUsersByOrgAsync(Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
-            var rows = await connection.QueryAsync<dynamic>(
+            using var connection = new NpgsqlConnection(_conn);
+            // dynamic rows bypass Dapper's registered type handlers, so map
+            // straight to a value tuple instead (Dapper supports this
+            // positionally) rather than going through `dynamic`.
+            return await connection.QueryAsync<(Guid Id, string Username)>(
                 "SELECT Id, Username FROM UsersOfBakeFix WHERE OrganizationId = @orgId",
                 new { orgId });
-            return rows.Select(r => ((Guid)r.Id, (string)r.Username));
         }
 
         public async Task<IEnumerable<PrayerRecord>> GetPendingTransitionRecordsAsync(Guid orgId, DateTime localDate)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerRecord>(
                 @"SELECT * FROM PrayerRecords
                   WHERE OrganizationId = @orgId
@@ -343,7 +349,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<PrayerRecord>> GetOrgRecordsByDateAsync(Guid orgId, DateTime localDate)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerRecord>(
                 @"SELECT * FROM PrayerRecords
                   WHERE OrganizationId = @orgId AND PrayerDate = @localDate
@@ -353,7 +359,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<PrayerStreak>> GetAllStreaksByOrgAsync(Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<PrayerStreak>(
                 @"SELECT * FROM PrayerStreaks WHERE OrganizationId = @orgId
                   ORDER BY CurrentStreak DESC",

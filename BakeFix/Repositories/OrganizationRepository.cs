@@ -1,6 +1,6 @@
 using BakeFix.Models;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -26,7 +26,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<Organization>> GetAllAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             var orgs = (await connection.QueryAsync<Organization>(
                 "SELECT Id, Name, Slug, IsActive, CreatedAt, Timezone FROM Organizations ORDER BY CreatedAt DESC"))
@@ -52,7 +52,7 @@ namespace BakeFix.Repositories
 
         public async Task<Organization?> GetByIdAsync(Guid id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             var org = await connection.QueryFirstOrDefaultAsync<Organization>(
                 "SELECT Id, Name, Slug, IsActive, CreatedAt, Timezone FROM Organizations WHERE Id = @id",
@@ -66,7 +66,7 @@ namespace BakeFix.Repositories
 
         public async Task<Organization> CreateAsync(Organization org)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             org.Id       = Guid.NewGuid();
             org.IsActive = true;
@@ -94,7 +94,7 @@ namespace BakeFix.Repositories
 
         public async Task SetActiveAsync(Guid id, bool isActive)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 "UPDATE Organizations SET IsActive = @isActive WHERE Id = @id",
                 new { id, isActive });
@@ -102,7 +102,7 @@ namespace BakeFix.Repositories
 
         public async Task<List<string>> GetEnabledModulesAsync(Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             var modules = await connection.QueryAsync<string>(
                 @"SELECT m.Name
@@ -116,19 +116,19 @@ namespace BakeFix.Repositories
 
         public async Task SetModuleEnabledAsync(Guid orgId, string moduleName, bool enabled)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             await connection.ExecuteAsync(
                 @"UPDATE OrganizationModules om
-                  JOIN Modules m ON m.Id = om.ModuleId
-                  SET om.IsEnabled = @enabled
-                  WHERE om.OrganizationId = @orgId AND m.Name = @moduleName",
+                  SET IsEnabled = @enabled
+                  FROM Modules m
+                  WHERE om.ModuleId = m.Id AND om.OrganizationId = @orgId AND m.Name = @moduleName",
                 new { orgId, moduleName, enabled });
         }
 
         public async Task UpdateTimezoneAsync(Guid id, string timezone)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 "UPDATE Organizations SET Timezone = @timezone WHERE Id = @id",
                 new { id, timezone });

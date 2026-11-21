@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -18,7 +18,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<ProductCategory>> GetAllAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<ProductCategory>(
                 "SELECT Id, OrganizationId, Name, CreatedAt FROM ProductCategories WHERE OrganizationId = @orgId ORDER BY Name ASC",
                 new { orgId = _tenant.RequiredOrgId });
@@ -26,7 +26,7 @@ namespace BakeFix.Repositories
 
         public async Task<ProductCategory> CreateAsync(ProductCategory category)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             category.OrganizationId = _tenant.RequiredOrgId;
             await connection.ExecuteAsync(
                 "INSERT INTO ProductCategories (Id, OrganizationId, Name, CreatedAt) VALUES (@Id, @OrganizationId, @Name, @CreatedAt)",
@@ -36,7 +36,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> UpdateAsync(Guid id, string name)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             int rows = await connection.ExecuteAsync(
                 "UPDATE ProductCategories SET Name = @name WHERE Id = @id AND OrganizationId = @orgId",
                 new { name, id, orgId = _tenant.RequiredOrgId });
@@ -45,7 +45,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> HasProductsAsync(Guid categoryId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM Products WHERE CategoryId = @categoryId AND OrganizationId = @orgId",
                 new { categoryId, orgId = _tenant.RequiredOrgId }) > 0;
@@ -53,7 +53,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> DeleteAsync(Guid id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             int rows = await connection.ExecuteAsync(
                 "DELETE FROM ProductCategories WHERE Id = @id AND OrganizationId = @orgId",
                 new { id, orgId = _tenant.RequiredOrgId });

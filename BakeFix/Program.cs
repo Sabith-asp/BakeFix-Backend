@@ -2,11 +2,24 @@ using BakeFix.Filters;
 using BakeFix.Migrations;
 using BakeFix.Repositories;
 using BakeFix.Services;
+using Dapper;
 using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+
+// Postgres stores our GUIDs as CHAR(36) text, not the native `uuid` type, so
+// Dapper needs explicit handlers to parse them into C# Guid (MySql.Data did
+// this conversion implicitly; Npgsql does not). Dapper's built-in type map
+// for Guid must be removed first, or it bypasses these custom handlers and
+// lets Npgsql bind Guid parameters as native `uuid` (which then fails to
+// compare against a `character` column: "operator does not exist: character
+// = uuid").
+SqlMapper.RemoveTypeMap(typeof(Guid));
+SqlMapper.RemoveTypeMap(typeof(Guid?));
+SqlMapper.AddTypeHandler(new GuidTypeHandler());
+SqlMapper.AddTypeHandler(new NullableGuidTypeHandler());
 
 var builder = WebApplication.CreateBuilder(args);
 Env.TraversePath().Load(".env");

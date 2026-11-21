@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -18,7 +18,7 @@ namespace BakeFix.Repositories
 
         public async Task<NotificationSettings> GetAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             var settings = await connection.QueryFirstOrDefaultAsync<NotificationSettings>(
@@ -36,7 +36,7 @@ namespace BakeFix.Repositories
 
         public async Task<NotificationSettings?> GetByOrgIdAsync(Guid orgId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryFirstOrDefaultAsync<NotificationSettings>(
                 "SELECT * FROM NotificationSettings WHERE OrgId = @orgId",
                 new { orgId });
@@ -48,7 +48,7 @@ namespace BakeFix.Repositories
         /// </summary>
         public async Task<IEnumerable<NotificationSettings>> GetAllEnabledRemindersAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<NotificationSettings>(
                 @"SELECT ns.* FROM NotificationSettings ns
                   INNER JOIN OrganizationModules om ON om.OrganizationId = ns.OrgId
@@ -60,11 +60,11 @@ namespace BakeFix.Repositories
 
         public async Task UpsertAsync(NotificationSettings settings)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             await connection.ExecuteAsync(
                 @"INSERT INTO NotificationSettings (OrgId, DailyReminderEnabled, ReminderHour, WeeklySummaryEnabled, BudgetAlertsEnabled)
                   VALUES (@OrgId, @DailyReminderEnabled, @ReminderHour, @WeeklySummaryEnabled, @BudgetAlertsEnabled)
-                  ON DUPLICATE KEY UPDATE
+                  ON CONFLICT (OrgId) DO UPDATE SET
                     DailyReminderEnabled = @DailyReminderEnabled,
                     ReminderHour         = @ReminderHour,
                     WeeklySummaryEnabled = @WeeklySummaryEnabled,

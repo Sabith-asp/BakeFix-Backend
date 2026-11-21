@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -19,14 +19,14 @@ namespace BakeFix.Repositories
         public async Task<(IEnumerable<Wage> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
             DateTime? startDate, DateTime? endDate, int page, int pageSize, string? employeeId = null, string? divisionId = null)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             const string where = @"WHERE w.OrganizationId = @orgId
-                                     AND (@startDate IS NULL OR w.`Date` >= @startDate)
-                                     AND (@endDate IS NULL OR w.`Date` <= @endDate)
-                                     AND (@employeeId IS NULL OR w.EmployeeId = @employeeId)
-                                     AND (@divisionId IS NULL OR w.DivisionId = @divisionId)";
+                                     AND (@startDate::timestamp IS NULL OR w.Date >= @startDate::timestamp)
+                                     AND (@endDate::timestamp IS NULL OR w.Date <= @endDate::timestamp)
+                                     AND (@employeeId::text IS NULL OR w.EmployeeId = @employeeId::text)
+                                     AND (@divisionId::text IS NULL OR w.DivisionId = @divisionId::text)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
                 $"SELECT COUNT(*) AS Count, COALESCE(SUM(w.Amount), 0) AS Amount FROM Wages w {where}",
@@ -41,7 +41,7 @@ namespace BakeFix.Repositories
                           e.Name AS EmployeeName,
                           w.Description,
                           w.PaymentMethod,
-                          w.`Date`,
+                          w.Date,
                           w.CreatedAt,
                           w.DivisionId,
                           d.Name AS DivisionName
@@ -49,7 +49,7 @@ namespace BakeFix.Repositories
                    LEFT JOIN Employees e ON e.Id = w.EmployeeId
                    LEFT JOIN Divisions d ON d.Id = w.DivisionId
                    {where}
-                   ORDER BY w.`Date` DESC, w.CreatedAt DESC
+                   ORDER BY w.Date DESC, w.CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
                 new { orgId, startDate, endDate, employeeId, divisionId, pageSize, offset });
 
@@ -58,7 +58,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<EmployeeWageSummary>> GetEmployeeSummaryAsync(DateTime? startDate, DateTime? endDate)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             const string query = @"
@@ -70,8 +70,8 @@ namespace BakeFix.Repositories
                 FROM Wages w
                 LEFT JOIN Employees e ON e.Id = w.EmployeeId
                 WHERE w.OrganizationId = @orgId
-                  AND (@startDate IS NULL OR w.`Date` >= @startDate)
-                  AND (@endDate IS NULL OR w.`Date` <= @endDate)
+                  AND (@startDate::timestamp IS NULL OR w.Date >= @startDate::timestamp)
+                  AND (@endDate::timestamp IS NULL OR w.Date <= @endDate::timestamp)
                 GROUP BY w.EmployeeId, e.Name
                 ORDER BY TotalAmount DESC";
 
@@ -80,11 +80,11 @@ namespace BakeFix.Repositories
 
         public async Task<Wage> CreateAsync(Wage wage)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             wage.OrganizationId = _tenant.RequiredOrgId;
 
             const string query = @"INSERT INTO Wages
-                                   (Id, OrganizationId, Amount, EmployeeId, Description, PaymentMethod, DivisionId, `Date`, CreatedAt)
+                                   (Id, OrganizationId, Amount, EmployeeId, Description, PaymentMethod, DivisionId, Date, CreatedAt)
                                    VALUES (@Id, @OrganizationId, @Amount, @EmployeeId, @Description, @PaymentMethod, @DivisionId, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, wage);
@@ -93,11 +93,11 @@ namespace BakeFix.Repositories
 
         public async Task<bool> UpdateAsync(Wage wage)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             const string query = @"UPDATE Wages
                                    SET Amount=@Amount, EmployeeId=@EmployeeId, Description=@Description,
-                                       PaymentMethod=@PaymentMethod, DivisionId=@DivisionId, `Date`=@Date
+                                       PaymentMethod=@PaymentMethod, DivisionId=@DivisionId, Date=@Date
                                    WHERE Id=@Id AND OrganizationId=@OrgId";
 
             int rows = await connection.ExecuteAsync(query, new
@@ -116,7 +116,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> DeleteAsync(string id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             int rows = await connection.ExecuteAsync(
                 "DELETE FROM Wages WHERE Id = @Id AND OrganizationId = @OrgId",

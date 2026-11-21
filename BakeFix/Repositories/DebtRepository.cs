@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -18,31 +18,31 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<Debt>> GetAllAsync(string? type, bool? settled)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             return await connection.QueryAsync<Debt>(
                 @"SELECT d.Id, d.OrganizationId, d.PersonName, d.Amount, d.Type,
-                         d.`Date`, d.DueDate, d.Notes, d.IsSettled, d.CreatedAt,
+                         d.Date, d.DueDate, d.Notes, d.IsSettled, d.CreatedAt,
                          COALESCE(SUM(dp.Amount), 0) AS PaidAmount
                   FROM Debts d
                   LEFT JOIN DebtPayments dp ON dp.DebtId = d.Id
                   WHERE d.OrganizationId = @orgId
-                    AND (@type IS NULL OR d.Type = @type)
-                    AND (@settled IS NULL OR d.IsSettled = @settled)
+                    AND (@type::text IS NULL OR d.Type = @type::text)
+                    AND (@settled::boolean IS NULL OR d.IsSettled = @settled::boolean)
                   GROUP BY d.Id
-                  ORDER BY d.IsSettled ASC, d.`Date` DESC, d.CreatedAt DESC",
+                  ORDER BY d.IsSettled ASC, d.Date DESC, d.CreatedAt DESC",
                 new { orgId, type, settled });
         }
 
         public async Task<Debt?> GetByIdAsync(string id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             var debt = await connection.QueryFirstOrDefaultAsync<Debt>(
                 @"SELECT d.Id, d.OrganizationId, d.PersonName, d.Amount, d.Type,
-                         d.`Date`, d.DueDate, d.Notes, d.IsSettled, d.CreatedAt,
+                         d.Date, d.DueDate, d.Notes, d.IsSettled, d.CreatedAt,
                          COALESCE(SUM(dp.Amount), 0) AS PaidAmount
                   FROM Debts d
                   LEFT JOIN DebtPayments dp ON dp.DebtId = d.Id
@@ -53,10 +53,10 @@ namespace BakeFix.Repositories
             if (debt is null) return null;
 
             debt.Payments = (await connection.QueryAsync<DebtPayment>(
-                @"SELECT Id, DebtId, Amount, `Date`, Notes, CreatedAt
+                @"SELECT Id, DebtId, Amount, Date, Notes, CreatedAt
                   FROM DebtPayments
                   WHERE DebtId = @id
-                  ORDER BY `Date` DESC, CreatedAt DESC",
+                  ORDER BY Date DESC, CreatedAt DESC",
                 new { id })).ToList();
 
             return debt;
@@ -64,11 +64,11 @@ namespace BakeFix.Repositories
 
         public async Task<Debt> CreateAsync(Debt debt)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             debt.OrganizationId = _tenant.RequiredOrgId;
 
             await connection.ExecuteAsync(
-                @"INSERT INTO Debts (Id, OrganizationId, PersonName, Amount, Type, `Date`, DueDate, Notes, IsSettled, CreatedAt)
+                @"INSERT INTO Debts (Id, OrganizationId, PersonName, Amount, Type, Date, DueDate, Notes, IsSettled, CreatedAt)
                   VALUES (@Id, @OrganizationId, @PersonName, @Amount, @Type, @Date, @DueDate, @Notes, @IsSettled, @CreatedAt)",
                 debt);
 
@@ -77,12 +77,12 @@ namespace BakeFix.Repositories
 
         public async Task<bool> UpdateAsync(Debt debt)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             int rows = await connection.ExecuteAsync(
                 @"UPDATE Debts
                   SET PersonName=@PersonName, Amount=@Amount, Type=@Type,
-                      `Date`=@Date, DueDate=@DueDate, Notes=@Notes
+                      Date=@Date, DueDate=@DueDate, Notes=@Notes
                   WHERE Id=@Id AND OrganizationId=@OrgId",
                 new
                 {
@@ -101,7 +101,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> DeleteAsync(string id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             int rows = await connection.ExecuteAsync(
                 "DELETE FROM Debts WHERE Id = @Id AND OrganizationId = @OrgId",
@@ -112,7 +112,7 @@ namespace BakeFix.Repositories
 
         public async Task<DebtPayment> AddPaymentAsync(string debtId, DebtPayment payment)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             var exists = await connection.QueryFirstOrDefaultAsync<int>(
@@ -122,16 +122,16 @@ namespace BakeFix.Repositories
             if (exists == 0) throw new ArgumentException("Debt not found");
 
             await connection.ExecuteAsync(
-                @"INSERT INTO DebtPayments (Id, DebtId, Amount, `Date`, Notes, CreatedAt)
+                @"INSERT INTO DebtPayments (Id, DebtId, Amount, Date, Notes, CreatedAt)
                   VALUES (@Id, @DebtId, @Amount, @Date, @Notes, @CreatedAt)",
                 payment);
 
             // Auto-settle when fully paid
             await connection.ExecuteAsync(
                 @"UPDATE Debts d
-                  SET d.IsSettled = CASE
-                    WHEN (SELECT COALESCE(SUM(dp.Amount), 0) FROM DebtPayments dp WHERE dp.DebtId = d.Id) >= d.Amount THEN 1
-                    ELSE 0
+                  SET IsSettled = CASE
+                    WHEN (SELECT COALESCE(SUM(dp.Amount), 0) FROM DebtPayments dp WHERE dp.DebtId = d.Id) >= d.Amount THEN TRUE
+                    ELSE FALSE
                   END
                   WHERE d.Id = @debtId",
                 new { debtId });
@@ -141,7 +141,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> DeletePaymentAsync(string debtId, string paymentId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             var exists = await connection.QueryFirstOrDefaultAsync<int>(
@@ -159,9 +159,9 @@ namespace BakeFix.Repositories
                 // Re-evaluate settled status after payment removal
                 await connection.ExecuteAsync(
                     @"UPDATE Debts d
-                      SET d.IsSettled = CASE
-                        WHEN (SELECT COALESCE(SUM(dp.Amount), 0) FROM DebtPayments dp WHERE dp.DebtId = d.Id) >= d.Amount THEN 1
-                        ELSE 0
+                      SET IsSettled = CASE
+                        WHEN (SELECT COALESCE(SUM(dp.Amount), 0) FROM DebtPayments dp WHERE dp.DebtId = d.Id) >= d.Amount THEN TRUE
+                        ELSE FALSE
                       END
                       WHERE d.Id = @debtId",
                     new { debtId });
@@ -172,10 +172,10 @@ namespace BakeFix.Repositories
 
         public async Task<bool> SettleAsync(string id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             int rows = await connection.ExecuteAsync(
-                "UPDATE Debts SET IsSettled = 1 WHERE Id = @Id AND OrganizationId = @OrgId",
+                "UPDATE Debts SET IsSettled = TRUE WHERE Id = @Id AND OrganizationId = @OrgId",
                 new { Id = id, OrgId = _tenant.RequiredOrgId });
 
             return rows > 0;

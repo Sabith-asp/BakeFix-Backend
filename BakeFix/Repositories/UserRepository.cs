@@ -1,7 +1,7 @@
 using BakeFix.DTOs;
 using BakeFix.Models;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -23,14 +23,14 @@ namespace BakeFix.Repositories
                 WHERE u.OrganizationId = @orgId
                 ORDER BY u.Username ASC";
 
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new NpgsqlConnection(_connectionString);
             return await connection.QueryAsync<OrgUserResponse>(query, new { orgId });
         }
 
         public async Task<bool> UsernameExistsAsync(string username)
         {
             const string query = "SELECT COUNT(1) FROM UsersOfBakeFix WHERE Username = @username";
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new NpgsqlConnection(_connectionString);
             return await connection.ExecuteScalarAsync<int>(query, new { username }) > 0;
         }
 
@@ -40,14 +40,14 @@ namespace BakeFix.Repositories
                 INSERT INTO UsersOfBakeFix (Id, Username, Password, PasswordHash, OrganizationId, RoleId)
                 VALUES (@Id, @Username, @Password, @PasswordHash, @OrganizationId, @RoleId)";
 
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new NpgsqlConnection(_connectionString);
             await connection.ExecuteAsync(query, user);
         }
 
         public async Task DeleteUserAsync(Guid userId)
         {
             const string query = "DELETE FROM UsersOfBakeFix WHERE Id = @userId";
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new NpgsqlConnection(_connectionString);
             await connection.ExecuteAsync(query, new { userId });
         }
 
@@ -61,7 +61,7 @@ namespace BakeFix.Repositories
             const string query = @"UPDATE UsersOfBakeFix
                                    SET Password = @plainPassword, PasswordHash = @bcryptHash
                                    WHERE Id = @userId";
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new NpgsqlConnection(_connectionString);
             await connection.ExecuteAsync(query, new { userId, plainPassword, bcryptHash });
         }
 
@@ -82,7 +82,7 @@ namespace BakeFix.Repositories
                 LEFT JOIN Organizations o ON o.Id = u.OrganizationId
                 WHERE u.Username = @Username";
 
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new NpgsqlConnection(_connectionString);
             return await connection.QueryFirstOrDefaultAsync<User>(query, new { Username = username });
         }
 
@@ -103,7 +103,7 @@ namespace BakeFix.Repositories
                 LEFT JOIN Organizations o ON o.Id = u.OrganizationId
                 WHERE u.Id = @id";
 
-            using var connection = new MySqlConnection(_connectionString);
+            using var connection = new NpgsqlConnection(_connectionString);
             return await connection.QueryFirstOrDefaultAsync<User>(query, new { id });
         }
     }

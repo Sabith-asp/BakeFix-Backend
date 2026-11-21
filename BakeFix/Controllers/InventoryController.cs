@@ -82,7 +82,7 @@ namespace BakeFix.Controllers
 
         /// <summary>List products with optional search, category, and pagination filters.</summary>
         /// <remarks>
-        /// <c>search</c> performs a FULLTEXT search on product name and description.
+        /// <c>search</c> performs a prefix text search on product name and description.
         /// Only active products are returned unless <c>includeInactive=true</c>.
         /// </remarks>
         /// <param name="search">Search term matched against name and description. Optional.</param>

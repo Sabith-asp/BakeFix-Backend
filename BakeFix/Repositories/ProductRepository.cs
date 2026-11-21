@@ -1,7 +1,8 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
+using System.Text.RegularExpressions;
 
 namespace BakeFix.Repositories
 {
@@ -16,20 +17,37 @@ namespace BakeFix.Repositories
             _tenant = tenant;
         }
 
+        /// <summary>
+        /// Builds a prefix-matching tsquery string equivalent to MySQL's
+        /// MATCH ... AGAINST (... IN BOOLEAN MODE) with a trailing '*':
+        /// each word becomes a `word:*` prefix term, ANDed together.
+        /// </summary>
+        private static string? BuildPrefixTsQuery(string? search)
+        {
+            if (string.IsNullOrWhiteSpace(search)) return null;
+            var terms = search
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => Regex.Replace(w, @"[^\w]", ""))
+                .Where(w => w.Length > 0)
+                .Select(w => w + ":*")
+                .ToArray();
+            return terms.Length == 0 ? null : string.Join(" & ", terms);
+        }
+
         public async Task<(IEnumerable<Product> Items, int TotalCount)> GetAllAsync(
             string? search, Guid? categoryId, bool includeInactive, int page, int pageSize)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             var conditions = new List<string> { "p.OrganizationId = @orgId" };
-            if (!includeInactive) conditions.Add("p.IsActive = 1");
+            if (!includeInactive) conditions.Add("p.IsActive = TRUE");
             if (categoryId.HasValue) conditions.Add("p.CategoryId = @categoryId");
-            if (!string.IsNullOrWhiteSpace(search))
-                conditions.Add("MATCH(p.Name, p.Description) AGAINST(@search IN BOOLEAN MODE)");
+            var searchParam = BuildPrefixTsQuery(search);
+            if (searchParam is not null)
+                conditions.Add("p.SearchVector @@ to_tsquery('simple', @search)");
 
             var where = "WHERE " + string.Join(" AND ", conditions);
-            var searchParam = string.IsNullOrWhiteSpace(search) ? null : search.Trim() + "*";
 
             var total = await connection.ExecuteScalarAsync<int>(
                 $"SELECT COUNT(*) FROM Products p {where}",
@@ -53,7 +71,7 @@ namespace BakeFix.Repositories
 
         public async Task<Product?> GetByIdAsync(Guid id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryFirstOrDefaultAsync<Product>(
                 @"SELECT p.Id, p.OrganizationId, p.CategoryId, c.Name AS CategoryName,
                          p.Name, p.Description, p.SKU, p.Unit,
@@ -67,7 +85,7 @@ namespace BakeFix.Repositories
 
         public async Task<Product> CreateAsync(Product product)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             product.OrganizationId = _tenant.RequiredOrgId;
             await connection.ExecuteAsync(
                 @"INSERT INTO Products
@@ -75,14 +93,14 @@ namespace BakeFix.Repositories
                      CostPrice, SellingPrice, CurrentStock, LowStockAlert, IsActive, CreatedAt, UpdatedAt)
                   VALUES
                     (@Id, @OrganizationId, @CategoryId, @Name, @Description, @SKU, @Unit,
-                     @CostPrice, @SellingPrice, 0, @LowStockAlert, 1, @CreatedAt, @UpdatedAt)",
+                     @CostPrice, @SellingPrice, 0, @LowStockAlert, TRUE, @CreatedAt, @UpdatedAt)",
                 product);
             return product;
         }
 
         public async Task<bool> UpdateAsync(Product product)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             int rows = await connection.ExecuteAsync(
                 @"UPDATE Products
                   SET CategoryId = @CategoryId, Name = @Name, Description = @Description,
@@ -101,7 +119,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> SetActiveAsync(Guid id, bool isActive)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             int rows = await connection.ExecuteAsync(
                 "UPDATE Products SET IsActive = @isActive, UpdatedAt = @now WHERE Id = @id AND OrganizationId = @orgId",
                 new { isActive, now = DateTime.UtcNow, id, orgId = _tenant.RequiredOrgId });
@@ -110,7 +128,7 @@ namespace BakeFix.Repositories
 
         public async Task<InventorySummary> GetSummaryAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             var stats = await connection.QuerySingleAsync<InventorySummary>(@"
@@ -120,7 +138,7 @@ namespace BakeFix.Repositories
                     SUM(CASE WHEN CurrentStock = 0 THEN 1 ELSE 0 END)                               AS OutOfStockCount,
                     COALESCE(SUM(CurrentStock * CostPrice), 0)                                       AS TotalInventoryValue
                 FROM Products
-                WHERE OrganizationId = @orgId AND IsActive = 1",
+                WHERE OrganizationId = @orgId AND IsActive = TRUE",
                 new { orgId });
 
             var todaySales = await connection.QuerySingleAsync<(decimal Amount, int Count)>(@"
@@ -128,8 +146,8 @@ namespace BakeFix.Repositories
                 FROM StockTransactions
                 WHERE OrganizationId = @orgId
                   AND Type = 'Sale'
-                  AND Date >= CURDATE()
-                  AND Date < DATE_ADD(CURDATE(), INTERVAL 1 DAY)",
+                  AND Date >= CURRENT_DATE
+                  AND Date < CURRENT_DATE + INTERVAL '1 day'",
                 new { orgId });
 
             stats.TodaySalesAmount = todaySales.Amount;
@@ -140,14 +158,14 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<Product>> GetLowStockAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<Product>(
                 @"SELECT p.Id, p.OrganizationId, p.CategoryId, c.Name AS CategoryName,
                          p.Name, p.SKU, p.Unit, p.CurrentStock, p.LowStockAlert, p.IsActive
                   FROM Products p
                   LEFT JOIN ProductCategories c ON c.Id = p.CategoryId
                   WHERE p.OrganizationId = @orgId
-                    AND p.IsActive = 1
+                    AND p.IsActive = TRUE
                     AND p.LowStockAlert IS NOT NULL
                     AND p.CurrentStock <= p.LowStockAlert
                   ORDER BY p.CurrentStock ASC",
