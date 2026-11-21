@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -19,13 +19,13 @@ namespace BakeFix.Repositories
         public async Task<(IEnumerable<Income> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
             DateTime? startDate, DateTime? endDate, int page, int pageSize, string? divisionId = null)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             const string where = @"WHERE i.OrganizationId = @orgId
-                                     AND (@startDate IS NULL OR i.`Date` >= @startDate)
-                                     AND (@endDate IS NULL OR i.`Date` <= @endDate)
-                                     AND (@divisionId IS NULL OR i.DivisionId = @divisionId)";
+                                     AND (@startDate::timestamp IS NULL OR i.Date >= @startDate::timestamp)
+                                     AND (@endDate::timestamp IS NULL OR i.Date <= @endDate::timestamp)
+                                     AND (@divisionId::text IS NULL OR i.DivisionId = @divisionId::text)";
 
             var summary = await connection.QuerySingleAsync<(int Count, decimal Amount)>(
                 $"SELECT COUNT(*) AS Count, COALESCE(SUM(i.Amount), 0) AS Amount FROM Incomes i {where}",
@@ -34,12 +34,12 @@ namespace BakeFix.Repositories
             int offset = (page - 1) * pageSize;
             var items = await connection.QueryAsync<Income>(
                 $@"SELECT i.Id, i.OrganizationId, i.Amount, i.Description,
-                          i.PaymentMethod, i.`Date`, i.CreatedAt, i.DivisionId,
+                          i.PaymentMethod, i.Date, i.CreatedAt, i.DivisionId,
                           d.Name AS DivisionName
                    FROM Incomes i
                    LEFT JOIN Divisions d ON d.Id = i.DivisionId
                    {where}
-                   ORDER BY i.`Date` DESC, i.CreatedAt DESC
+                   ORDER BY i.Date DESC, i.CreatedAt DESC
                    LIMIT @pageSize OFFSET @offset",
                 new { orgId, startDate, endDate, divisionId, pageSize, offset });
 
@@ -48,11 +48,11 @@ namespace BakeFix.Repositories
 
         public async Task<Income> CreateAsync(Income income)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             income.OrganizationId = _tenant.RequiredOrgId;
 
             const string query = @"INSERT INTO Incomes
-                             (Id, OrganizationId, Amount, Description, PaymentMethod, DivisionId, `Date`, CreatedAt)
+                             (Id, OrganizationId, Amount, Description, PaymentMethod, DivisionId, Date, CreatedAt)
                              VALUES (@Id, @OrganizationId, @Amount, @Description, @PaymentMethod, @DivisionId, @Date, @CreatedAt)";
 
             await connection.ExecuteAsync(query, income);
@@ -61,11 +61,11 @@ namespace BakeFix.Repositories
 
         public async Task<bool> UpdateAsync(Income income)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             const string query = @"UPDATE Incomes
                                    SET Amount=@Amount, Description=@Description,
-                                       PaymentMethod=@PaymentMethod, DivisionId=@DivisionId, `Date`=@Date
+                                       PaymentMethod=@PaymentMethod, DivisionId=@DivisionId, Date=@Date
                                    WHERE Id=@Id AND OrganizationId=@OrgId";
 
             int rows = await connection.ExecuteAsync(query, new
@@ -83,7 +83,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> DeleteAsync(string id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             int rows = await connection.ExecuteAsync(
                 "DELETE FROM Incomes WHERE Id = @Id AND OrganizationId = @OrgId",

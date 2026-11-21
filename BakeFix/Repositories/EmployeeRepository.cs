@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -18,7 +18,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<Employee>> GetAllAsync()
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             return await connection.QueryAsync<Employee>(
                 "SELECT Id, OrganizationId, Name, CreatedAt FROM Employees WHERE OrganizationId = @OrgId ORDER BY Name ASC",
@@ -27,7 +27,7 @@ namespace BakeFix.Repositories
 
         public async Task<Employee> CreateAsync(Employee employee)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             employee.OrganizationId = _tenant.RequiredOrgId;
 
             const string query = @"INSERT INTO Employees (Id, OrganizationId, Name, CreatedAt)
@@ -39,7 +39,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> ExistsAsync(Guid employeeId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             var count = await connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM Employees WHERE Id = @employeeId AND OrganizationId = @OrgId",
@@ -49,7 +49,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> NameExistsAsync(string name)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             var count = await connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM Employees WHERE LOWER(Name) = LOWER(@name) AND OrganizationId = @OrgId",
@@ -59,7 +59,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> NameExistsForOtherAsync(string name, Guid excludeId)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             var count = await connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM Employees WHERE LOWER(Name) = LOWER(@name) AND Id != @excludeId AND OrganizationId = @OrgId",
@@ -69,7 +69,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> UpdateAsync(Guid id, string name)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             int rows = await connection.ExecuteAsync(
                 "UPDATE Employees SET Name=@Name WHERE Id=@Id AND OrganizationId=@OrgId",
@@ -79,7 +79,7 @@ namespace BakeFix.Repositories
 
         public async Task<int> GetWageCountAsync(Guid id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             return await connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM Wages WHERE EmployeeId = @id AND OrganizationId = @OrgId",
@@ -88,7 +88,7 @@ namespace BakeFix.Repositories
 
         public async Task<bool> DeleteAsync(Guid id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
 
             int rows = await connection.ExecuteAsync(
                 "DELETE FROM Employees WHERE Id = @id AND OrganizationId = @OrgId",

@@ -1,5 +1,5 @@
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
@@ -28,7 +28,7 @@ namespace BakeFix.Services
             {
                 if (_orgTimezone is not null) return _orgTimezone;
                 if (OrganizationId is null) return (_orgTimezone = "UTC");
-                using var conn = new MySqlConnection(_connStr);
+                using var conn = new NpgsqlConnection(_connStr);
                 _orgTimezone = conn.QueryFirstOrDefault<string>(
                     "SELECT Timezone FROM Organizations WHERE Id = @id",
                     new { id = OrganizationId }) ?? "UTC";

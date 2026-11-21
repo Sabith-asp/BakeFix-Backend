@@ -17,9 +17,14 @@ namespace BakeFix.Models
         public DateTime OriginalTargetDate { get; set; }
         public DateTime CurrentTargetDate { get; set; }
         public DateTime? CompletedAt { get; set; }
+        public bool NeedsFollowUp { get; set; }
+        public DateTime? FollowUpDate { get; set; }
+        public string? FollowUpNotes { get; set; }
+        public DateTime? FollowUpResolvedAt { get; set; }
         public DateTime? DeletedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public int? SortOrder { get; set; }
         public List<TaskActivity>? ActivityLog { get; set; }
     }
 
@@ -91,6 +96,22 @@ namespace BakeFix.Models
     public class ChangePriorityRequest
     {
         public string Priority { get; set; } = "Medium";
+    }
+
+    // scope: "my" (private order, visible only to the current user) or "team" (shared org-wide order)
+    public class ReorderTasksRequest
+    {
+        public string Scope { get; set; } = "my";
+        public List<string> OrderedTaskIds { get; set; } = new();
+    }
+
+    // Setting needsFollowUp=true requires followUpDate; set needsFollowUp=false (or omit it while
+    // already false) to clear the flag. Resolving is a separate action (see ResolveFollowUp).
+    public class SetFollowUpRequest
+    {
+        public bool NeedsFollowUp { get; set; }
+        public string? FollowUpDate { get; set; }
+        public string? FollowUpNotes { get; set; }
     }
 
     public class AddCommentRequest

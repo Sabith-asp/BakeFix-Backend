@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -18,7 +18,7 @@ namespace BakeFix.Repositories
 
         public async Task<DailyNote?> GetPersonalByDateAsync(DateTime date)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryFirstOrDefaultAsync<DailyNote>(
                 @"SELECT Id, OrganizationId, CreatedByUserId, CreatedByUsername,
                          NoteDate, Content, Visibility, CreatedAt, UpdatedAt
@@ -30,7 +30,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<DailyNote>> GetOrgNotesByDateAsync(DateTime date)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<DailyNote>(
                 @"SELECT Id, OrganizationId, CreatedByUserId, CreatedByUsername,
                          NoteDate, Content, Visibility, CreatedAt, UpdatedAt
@@ -42,7 +42,7 @@ namespace BakeFix.Repositories
 
         public async Task<IEnumerable<DailyNote>> GetRecentPersonalAsync(int limit)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<DailyNote>(
                 @"SELECT Id, CreatedByUserId, CreatedByUsername, NoteDate, Content, Visibility, CreatedAt, UpdatedAt
                   FROM DailyNotes
@@ -54,7 +54,7 @@ namespace BakeFix.Repositories
 
         public async Task<DailyNote> UpsertPersonalAsync(DailyNote note)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             note.OrganizationId    = _tenant.RequiredOrgId;
             note.CreatedByUserId   = _tenant.RequiredUserId;
             note.CreatedByUsername = _tenant.Username;
@@ -65,17 +65,14 @@ namespace BakeFix.Repositories
                      NoteDate, Content, Visibility, CreatedAt, UpdatedAt)
                   VALUES
                     (@Id, @OrganizationId, @CreatedByUserId, @CreatedByUsername,
-                     @NoteDate, @Content, @Visibility, @CreatedAt, @UpdatedAt)
-                  ON DUPLICATE KEY UPDATE
-                    Content   = VALUES(Content),
-                    UpdatedAt = VALUES(UpdatedAt)",
+                     @NoteDate, @Content, @Visibility, @CreatedAt, @UpdatedAt)",
                 note);
             return note;
         }
 
         public async Task<DailyNote> UpsertOrgAsync(DailyNote note)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             note.OrganizationId    = _tenant.RequiredOrgId;
             note.CreatedByUserId   = _tenant.RequiredUserId;
             note.CreatedByUsername = _tenant.Username;
@@ -87,17 +84,14 @@ namespace BakeFix.Repositories
                      NoteDate, Content, Visibility, CreatedAt, UpdatedAt)
                   VALUES
                     (@Id, @OrganizationId, @CreatedByUserId, @CreatedByUsername,
-                     @NoteDate, @Content, @Visibility, @CreatedAt, @UpdatedAt)
-                  ON DUPLICATE KEY UPDATE
-                    Content   = VALUES(Content),
-                    UpdatedAt = VALUES(UpdatedAt)",
+                     @NoteDate, @Content, @Visibility, @CreatedAt, @UpdatedAt)",
                 note);
             return note;
         }
 
         public async Task<bool> DeletePersonalByDateAsync(DateTime date)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             int rows = await connection.ExecuteAsync(
                 @"DELETE FROM DailyNotes
                   WHERE OrganizationId = @orgId AND CreatedByUserId = @userId

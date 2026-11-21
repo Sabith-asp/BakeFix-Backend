@@ -1,7 +1,7 @@
 using BakeFix.Models;
 using BakeFix.Services;
 using Dapper;
-using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace BakeFix.Repositories
 {
@@ -19,7 +19,7 @@ namespace BakeFix.Repositories
         public async Task<(IEnumerable<StockTransaction> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
             Guid? productId, string? type, DateTime? startDate, DateTime? endDate, int page, int pageSize)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             var orgId = _tenant.RequiredOrgId;
 
             var conditions = new List<string> { "t.OrganizationId = @orgId" };
@@ -53,7 +53,7 @@ namespace BakeFix.Repositories
 
         public async Task<StockTransaction> CreateAsync(StockTransaction transaction)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             connection.Open();
             using var dbTx = connection.BeginTransaction();
 
@@ -90,7 +90,7 @@ namespace BakeFix.Repositories
 
         public async Task<(bool Success, string? Error)> DeleteAsync(Guid id)
         {
-            using var connection = new MySqlConnection(_conn);
+            using var connection = new NpgsqlConnection(_conn);
             connection.Open();
             using var dbTx = connection.BeginTransaction();
 

@@ -21,25 +21,40 @@ namespace BakeFix.Controllers
             _noteService = noteService;
         }
 
-        // GET /tasks/my?view=today&status=&priority=&category=&search=
+        // GET /tasks/my?view=today&status=&priority=&category=&search=&before=&limit=
+        // `before` (ISO date-time) and `limit` only affect the Completed bucket — of either the
+        // "completed" view itself or the Kanban board's Completed column within "all" — since
+        // that's the one list that grows without bound; every other view ignores them.
         [HttpGet("my")]
         public async Task<IActionResult> GetMyTasks(
             [FromQuery] string view = "today",
             [FromQuery] string? status = null,
             [FromQuery] string? priority = null,
             [FromQuery] string? category = null,
-            [FromQuery] string? search = null)
-            => Ok(await _taskService.GetMyTasksAsync(view, status, priority, category, search));
+            [FromQuery] string? search = null,
+            [FromQuery] DateTime? before = null,
+            [FromQuery] int limit = 30,
+            [FromQuery] bool? needsFollowUp = null)
+        {
+            var (items, nextCursor) = await _taskService.GetMyTasksAsync(view, status, priority, category, search, before, limit, needsFollowUp);
+            return Ok(new { items, nextCursor });
+        }
 
-        // GET /tasks/team?view=today&status=&priority=&category=&search=
+        // GET /tasks/team?view=today&status=&priority=&category=&search=&before=&limit=
         [HttpGet("team")]
         public async Task<IActionResult> GetTeamTasks(
             [FromQuery] string view = "today",
             [FromQuery] string? status = null,
             [FromQuery] string? priority = null,
             [FromQuery] string? category = null,
-            [FromQuery] string? search = null)
-            => Ok(await _taskService.GetTeamTasksAsync(view, status, priority, category, search));
+            [FromQuery] string? search = null,
+            [FromQuery] DateTime? before = null,
+            [FromQuery] int limit = 30,
+            [FromQuery] bool? needsFollowUp = null)
+        {
+            var (items, nextCursor) = await _taskService.GetTeamTasksAsync(view, status, priority, category, search, before, limit, needsFollowUp);
+            return Ok(new { items, nextCursor });
+        }
 
         // GET /tasks/summary
         [HttpGet("summary")]
@@ -111,6 +126,32 @@ namespace BakeFix.Controllers
             return NoContent();
         }
 
+
+        // PATCH /tasks/{id}/follow-up  { needsFollowUp, followUpDate, followUpNotes }
+        [HttpPatch("{id:guid}/follow-up")]
+        public async Task<IActionResult> SetFollowUp(Guid id, [FromBody] SetFollowUpRequest request)
+        {
+            var updated = await _taskService.SetFollowUpAsync(id, request);
+            if (!updated) return NotFound(new { message = "Task not found or access denied." });
+            return NoContent();
+        }
+
+        // PATCH /tasks/{id}/follow-up/resolve
+        [HttpPatch("{id:guid}/follow-up/resolve")]
+        public async Task<IActionResult> ResolveFollowUp(Guid id)
+        {
+            var updated = await _taskService.ResolveFollowUpAsync(id);
+            if (!updated) return NotFound(new { message = "Task not found, access denied, or no pending follow-up." });
+            return NoContent();
+        }
+
+        // PATCH /tasks/reorder  { scope: "my"|"team", orderedTaskIds: [...] }
+        [HttpPatch("reorder")]
+        public async Task<IActionResult> Reorder([FromBody] ReorderTasksRequest request)
+        {
+            await _taskService.ReorderAsync(request.Scope, request.OrderedTaskIds);
+            return NoContent();
+        }
 
         // PATCH /tasks/{id}/priority
         [HttpPatch("{id:guid}/priority")]

@@ -14,13 +14,15 @@ namespace BakeFix.Services
             _tenant = tenant;
         }
 
-        public Task<IEnumerable<TaskItem>> GetMyTasksAsync(
-            string view, string? status, string? priority, string? category, string? search)
-            => _repo.GetMyTasksAsync(view, status, priority, category, search);
+        public Task<(IEnumerable<TaskItem> Items, string? NextCursor)> GetMyTasksAsync(
+            string view, string? status, string? priority, string? category, string? search,
+            DateTime? before, int limit, bool? needsFollowUp = null)
+            => _repo.GetMyTasksAsync(view, status, priority, category, search, before, Math.Clamp(limit, 1, 100), needsFollowUp);
 
-        public Task<IEnumerable<TaskItem>> GetTeamTasksAsync(
-            string view, string? status, string? priority, string? category, string? search)
-            => _repo.GetTeamTasksAsync(view, status, priority, category, search);
+        public Task<(IEnumerable<TaskItem> Items, string? NextCursor)> GetTeamTasksAsync(
+            string view, string? status, string? priority, string? category, string? search,
+            DateTime? before, int limit, bool? needsFollowUp = null)
+            => _repo.GetTeamTasksAsync(view, status, priority, category, search, before, Math.Clamp(limit, 1, 100), needsFollowUp);
 
         public async Task<TaskItem?> GetByIdAsync(Guid id)
             => await _repo.GetByIdAsync(id);
@@ -167,6 +169,72 @@ namespace BakeFix.Services
             return updated;
         }
 
+        // Follow-ups only make sense on a task that's already done; setting one requires a date.
+        public async Task<bool> SetFollowUpAsync(Guid id, SetFollowUpRequest request)
+        {
+            var existing = await _repo.GetByIdAsync(id)
+                ?? throw new ArgumentException("Task not found.");
+
+            if (request.NeedsFollowUp)
+            {
+                if (existing.Status != "Completed")
+                    throw new ArgumentException("Only a completed task can have a follow-up.");
+                if (!DateTime.TryParse(request.FollowUpDate, out var parsedDate))
+                    throw new ArgumentException("A follow-up date is required.");
+
+                var updated = await _repo.SetFollowUpAsync(id, true, parsedDate, request.FollowUpNotes?.Trim());
+                if (updated)
+                {
+                    await _repo.LogActivityAsync(new TaskActivity
+                    {
+                        Id                  = Guid.NewGuid(),
+                        TaskId              = id,
+                        PerformedByUserId   = _tenant.RequiredUserId,
+                        PerformedByUsername = _tenant.Username,
+                        ActivityType        = "FollowUpSet",
+                        NewValue            = parsedDate.ToString("yyyy-MM-dd"),
+                        CreatedAt           = DateTime.UtcNow
+                    });
+                }
+                return updated;
+            }
+            else
+            {
+                var updated = await _repo.SetFollowUpAsync(id, false, null, null);
+                if (updated && existing.NeedsFollowUp)
+                {
+                    await _repo.LogActivityAsync(new TaskActivity
+                    {
+                        Id                  = Guid.NewGuid(),
+                        TaskId              = id,
+                        PerformedByUserId   = _tenant.RequiredUserId,
+                        PerformedByUsername = _tenant.Username,
+                        ActivityType        = "FollowUpCleared",
+                        CreatedAt           = DateTime.UtcNow
+                    });
+                }
+                return updated;
+            }
+        }
+
+        public async Task<bool> ResolveFollowUpAsync(Guid id)
+        {
+            var updated = await _repo.ResolveFollowUpAsync(id);
+            if (updated)
+            {
+                await _repo.LogActivityAsync(new TaskActivity
+                {
+                    Id                  = Guid.NewGuid(),
+                    TaskId              = id,
+                    PerformedByUserId   = _tenant.RequiredUserId,
+                    PerformedByUsername = _tenant.Username,
+                    ActivityType        = "FollowUpResolved",
+                    CreatedAt           = DateTime.UtcNow
+                });
+            }
+            return updated;
+        }
+
         public async Task<bool> ChangeVisibilityAsync(Guid id, string visibility)
         {
             var valid = new[] { "Personal", "Organisation" };
@@ -244,6 +312,30 @@ namespace BakeFix.Services
 
         public async Task<bool> DeleteAsync(Guid id)
             => await _repo.DeleteAsync(id);
+
+        // scope "my": private order, only the current user ever sees it.
+        // scope "team": shared order, every org member sees the same result.
+        public async Task ReorderAsync(string scope, List<string> orderedTaskIds)
+        {
+            var validScopes = new[] { "my", "team" };
+            if (!validScopes.Contains(scope))
+                throw new ArgumentException("Invalid scope.");
+            if (orderedTaskIds is null || orderedTaskIds.Count == 0)
+                throw new ArgumentException("orderedTaskIds is required.");
+
+            List<Guid> ids;
+            try { ids = orderedTaskIds.Select(Guid.Parse).ToList(); }
+            catch (FormatException) { throw new ArgumentException("orderedTaskIds must be valid GUIDs."); }
+
+            var scopeType = scope == "team" ? "Team" : "User";
+            var scopeId = scope == "team" ? _tenant.RequiredOrgId : _tenant.RequiredUserId;
+
+            var valid = await _repo.FilterValidTaskIdsAsync(ids, requireOrgVisible: scope == "team");
+            var filtered = ids.Where(valid.Contains).ToList();
+            if (filtered.Count == 0) return;
+
+            await _repo.ReorderAsync(scopeType, scopeId, filtered);
+        }
 
         public Task<(int TodayCount, int OverdueCount)> GetSummaryCountsAsync()
             => _repo.GetSummaryCountsAsync();
