@@ -5,34 +5,33 @@ namespace BakeFix.Services
     public class NotificationSchedulerService : BackgroundService
     {
         private readonly IServiceProvider _services;
+        private readonly TimeProvider _timeProvider;
         private readonly ILogger<NotificationSchedulerService> _logger;
 
-        public NotificationSchedulerService(IServiceProvider services, ILogger<NotificationSchedulerService> logger)
+        // Tracks the last org-local date a given org already received a given reminder
+        // kind on, so each org dedupes against its own local day instead of a single
+        // global "processed this UTC hour" gate (which silently assumed every org's
+        // reminder hour landed on a UTC hour boundary — wrong for half-hour-offset
+        // zones like Asia/Kolkata).
+        private readonly Dictionary<(Guid OrgId, string Kind), DateTime> _lastSentLocalDate = new();
+
+        public NotificationSchedulerService(IServiceProvider services, TimeProvider timeProvider, ILogger<NotificationSchedulerService> logger)
         {
             _services = services;
+            _timeProvider = timeProvider;
             _logger = logger;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            int lastProcessedHour = -1;
-
             while (!stoppingToken.IsCancellationRequested)
             {
-                var now = DateTime.UtcNow;
-
-                if (now.Hour != lastProcessedHour)
-                {
-                    lastProcessedHour = now.Hour;
-                    await ProcessHourAsync(now);
-                }
-
-                // Check again in 1 minute
+                await ProcessAsync();
                 await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }
 
-        private async Task ProcessHourAsync(DateTime now)
+        private async Task ProcessAsync()
         {
             try
             {
@@ -41,11 +40,16 @@ namespace BakeFix.Services
                 var pushService  = scope.ServiceProvider.GetRequiredService<PushNotificationService>();
 
                 var allSettings = await settingsRepo.GetAllEnabledRemindersAsync();
+                var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
 
                 foreach (var settings in allSettings)
                 {
-                    // Daily reminder: when UTC hour matches the org's configured hour
-                    if (settings.DailyReminderEnabled && now.Hour == settings.ReminderHour)
+                    var localNow = OrgTimeConversion.ToLocal(utcNow, settings.Timezone);
+
+                    // Daily reminder: when the org's own local hour matches its configured hour.
+                    if (settings.DailyReminderEnabled
+                        && localNow.Hour == settings.ReminderHour
+                        && _lastSentLocalDate.GetValueOrDefault((settings.OrgId, "Daily")) != localNow.Date)
                     {
                         await pushService.SendToOrgAsync(
                             settings.OrgId,
@@ -53,11 +57,15 @@ namespace BakeFix.Services
                             "Don't forget to log today's transactions 📋",
                             "/expenses");
 
+                        _lastSentLocalDate[(settings.OrgId, "Daily")] = localNow.Date;
                         _logger.LogInformation("Sent daily reminder to org {OrgId}", settings.OrgId);
                     }
 
-                    // Weekly summary: Monday at 9 AM UTC
-                    if (settings.WeeklySummaryEnabled && now.DayOfWeek == DayOfWeek.Monday && now.Hour == 9)
+                    // Weekly summary: Monday at 9 AM in the org's own local time.
+                    if (settings.WeeklySummaryEnabled
+                        && localNow.DayOfWeek == DayOfWeek.Monday
+                        && localNow.Hour == 9
+                        && _lastSentLocalDate.GetValueOrDefault((settings.OrgId, "Weekly")) != localNow.Date)
                     {
                         await pushService.SendToOrgAsync(
                             settings.OrgId,
@@ -65,13 +73,14 @@ namespace BakeFix.Services
                             "Your weekly financial summary is ready 📊",
                             "/");
 
+                        _lastSentLocalDate[(settings.OrgId, "Weekly")] = localNow.Date;
                         _logger.LogInformation("Sent weekly summary to org {OrgId}", settings.OrgId);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in notification scheduler at hour {Hour}", now.Hour);
+                _logger.LogError(ex, "Error in notification scheduler");
             }
         }
     }

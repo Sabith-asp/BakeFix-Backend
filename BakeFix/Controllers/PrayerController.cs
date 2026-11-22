@@ -35,10 +35,8 @@ namespace BakeFix.Controllers
             [FromQuery] string? startDate,
             [FromQuery] string? endDate)
         {
-            var from = startDate is not null && DateTime.TryParse(startDate, out var f)
-                ? f : DateTime.UtcNow.Date.AddDays(-30);
-            var to = endDate is not null && DateTime.TryParse(endDate, out var t)
-                ? t : DateTime.UtcNow.Date;
+            DateTime? from = startDate is not null && DateTime.TryParse(startDate, out var f) ? f : null;
+            DateTime? to   = endDate is not null && DateTime.TryParse(endDate, out var t) ? t : null;
 
             var result = await _prayer.GetHistoryAsync(from, to);
             return Ok(result);

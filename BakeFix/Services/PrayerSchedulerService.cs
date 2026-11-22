@@ -6,11 +6,13 @@ namespace BakeFix.Services
     public class PrayerSchedulerService : BackgroundService
     {
         private readonly IServiceProvider _services;
+        private readonly TimeProvider _timeProvider;
         private readonly ILogger<PrayerSchedulerService> _logger;
 
-        public PrayerSchedulerService(IServiceProvider services, ILogger<PrayerSchedulerService> logger)
+        public PrayerSchedulerService(IServiceProvider services, TimeProvider timeProvider, ILogger<PrayerSchedulerService> logger)
         {
             _services = services;
+            _timeProvider = timeProvider;
             _logger   = logger;
         }
 
@@ -60,8 +62,7 @@ namespace BakeFix.Services
                     userSettings.TryGetValue(userId, out var uSetting);
                     var effective = ResolveSettings(orgSettings, uSetting);
 
-                    TimeZoneInfo tzi = SafeGetTz(effective.Timezone);
-                    var localNow  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzi);
+                    var localNow  = OrgTimeConversion.ToLocal(_timeProvider.GetUtcNow().UtcDateTime, effective.Timezone);
                     var localDate = localNow.Date;
                     var times     = PrayerTimeCalculator.Calculate(effective, localDate);
 
@@ -78,8 +79,7 @@ namespace BakeFix.Services
                     userSettings.TryGetValue(userId, out var uSetting);
                     var effective = ResolveSettings(orgSettings, uSetting);
 
-                    TimeZoneInfo tzi = SafeGetTz(effective.Timezone);
-                    var localNow  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzi);
+                    var localNow  = OrgTimeConversion.ToLocal(_timeProvider.GetUtcNow().UtcDateTime, effective.Timezone);
                     var localTime = localNow.TimeOfDay;
                     var localDate = localNow.Date;
 
@@ -131,7 +131,7 @@ namespace BakeFix.Services
                         OldStatus       = record.Status,
                         NewStatus       = PrayerStatus.Pending,
                         ChangedByUsername = "System",
-                        ChangedAt       = DateTime.UtcNow
+                        ChangedAt       = _timeProvider.GetUtcNow().UtcDateTime
                     });
 
                     await push.SendToSubscriptionsByUserAsync(record.UserId,
@@ -160,7 +160,7 @@ namespace BakeFix.Services
                         OldStatus       = record.Status,
                         NewStatus       = PrayerStatus.Missed,
                         ChangedByUsername = "System",
-                        ChangedAt       = DateTime.UtcNow
+                        ChangedAt       = _timeProvider.GetUtcNow().UtcDateTime
                     });
 
                     await push.SendToSubscriptionsByUserAsync(record.UserId,
@@ -281,12 +281,6 @@ namespace BakeFix.Services
                 IshaAngle         = org.IshaAngle,
                 IsUserOverride    = false
             };
-        }
-
-        private static TimeZoneInfo SafeGetTz(string tz)
-        {
-            try { return TimeZoneInfo.FindSystemTimeZoneById(tz); }
-            catch { return TimeZoneInfo.Utc; }
         }
 
         private static string FormatTime(TimeSpan t)

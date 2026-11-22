@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class PushSubscription
@@ -8,6 +11,8 @@ namespace BakeFix.Models
         public string Endpoint { get; set; } = "";
         public string P256dh { get; set; } = "";
         public string Auth { get; set; } = "";
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
     }
 

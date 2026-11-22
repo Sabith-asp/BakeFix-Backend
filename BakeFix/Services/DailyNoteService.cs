@@ -6,10 +6,12 @@ namespace BakeFix.Services
     public class DailyNoteService
     {
         private readonly DailyNoteRepository _repo;
+        private readonly IAuditClock _clock;
 
-        public DailyNoteService(DailyNoteRepository repo)
+        public DailyNoteService(DailyNoteRepository repo, IAuditClock clock)
         {
             _repo = repo;
+            _clock = clock;
         }
 
         public Task<DailyNote?> GetPersonalByDateAsync(DateTime date)
@@ -34,8 +36,8 @@ namespace BakeFix.Services
                 NoteDate  = date,
                 Content   = request.Content.Trim(),
                 Visibility = request.Visibility == "Organisation" ? "Organisation" : "Personal",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                CreatedAt = _clock.UtcNow,
+                UpdatedAt = _clock.UtcNow
             };
 
             return request.Visibility == "Organisation"

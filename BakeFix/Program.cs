@@ -33,6 +33,10 @@ builder.Services.AddHttpContextAccessor();
 // ── Tenant context ──────────────────────────────────────────────────────────
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 
+// ── Clock (audit timestamps) ────────────────────────────────────────────────
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IAuditClock, AuditClock>();
+
 // ── Repositories ────────────────────────────────────────────────────────────
 builder.Services.AddScoped<UserRepository>();
 builder.Services.AddScoped<IOrganizationRepository, OrganizationRepository>();

@@ -7,10 +7,12 @@ namespace BakeFix.Services
     public class ExpenseService
     {
         private readonly ExpenseRepository _repo;
+        private readonly IAuditClock _clock;
 
-        public ExpenseService(ExpenseRepository repo)
+        public ExpenseService(ExpenseRepository repo, IAuditClock clock)
         {
             _repo = repo;
+            _clock = clock;
         }
 
         public async Task<PagedResult<Expense>> GetAllAsync(string? startDate, string? endDate, int page, int pageSize, string? category = null, string? divisionId = null)
@@ -44,7 +46,7 @@ namespace BakeFix.Services
                 PaymentMethod = request.PaymentMethod,
                 DivisionId = request.DivisionId,
                 Date = request.Date,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = _clock.UtcNow
             };
 
             return await _repo.CreateAsync(expense);
@@ -61,7 +63,7 @@ namespace BakeFix.Services
                 PaymentMethod = request.PaymentMethod,
                 DivisionId = request.DivisionId,
                 Date = request.Date,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = _clock.UtcNow
             };
 
             return await _repo.UpdateAsync(expense);

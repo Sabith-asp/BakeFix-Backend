@@ -6,10 +6,12 @@ namespace BakeFix.Services
     public class DivisionService
     {
         private readonly DivisionRepository _repo;
+        private readonly IAuditClock _clock;
 
-        public DivisionService(DivisionRepository repo)
+        public DivisionService(DivisionRepository repo, IAuditClock clock)
         {
             _repo = repo;
+            _clock = clock;
         }
 
         public async Task<IEnumerable<Division>> GetAllAsync()
@@ -30,7 +32,7 @@ namespace BakeFix.Services
             {
                 Id = Guid.NewGuid(),
                 Name = name,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = _clock.UtcNow,
             };
 
             return await _repo.CreateAsync(division);

@@ -9,11 +9,13 @@ namespace BakeFix.Repositories
     {
         private readonly string _conn;
         private readonly ITenantContext _tenant;
+        private readonly IAuditClock _clock;
 
-        public ProductCategoryRepository(IConfiguration config, ITenantContext tenant)
+        public ProductCategoryRepository(IConfiguration config, ITenantContext tenant, IAuditClock clock)
         {
             _conn = config.GetConnectionString("DefaultConnection")!;
             _tenant = tenant;
+            _clock = clock;
         }
 
         public async Task<IEnumerable<ProductCategory>> GetAllAsync()
@@ -28,6 +30,7 @@ namespace BakeFix.Repositories
         {
             using var connection = new NpgsqlConnection(_conn);
             category.OrganizationId = _tenant.RequiredOrgId;
+            category.CreatedAt = AuditTimestamps.ForCreate(category.CreatedAt, _clock);
             await connection.ExecuteAsync(
                 "INSERT INTO ProductCategories (Id, OrganizationId, Name, CreatedAt) VALUES (@Id, @OrganizationId, @Name, @CreatedAt)",
                 category);

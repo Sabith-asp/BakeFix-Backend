@@ -6,10 +6,12 @@ namespace BakeFix.Services
     public class DebtService
     {
         private readonly DebtRepository _repo;
+        private readonly IAuditClock _clock;
 
-        public DebtService(DebtRepository repo)
+        public DebtService(DebtRepository repo, IAuditClock clock)
         {
             _repo = repo;
+            _clock = clock;
         }
 
         public async Task<IEnumerable<Debt>> GetAllAsync(string? type, bool? settled)
@@ -34,7 +36,7 @@ namespace BakeFix.Services
                 DueDate = request.DueDate,
                 Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
                 IsSettled = false,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = _clock.UtcNow
             };
             return await _repo.CreateAsync(debt);
         }
@@ -68,7 +70,7 @@ namespace BakeFix.Services
                 Amount = request.Amount,
                 Date = request.Date,
                 Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = _clock.UtcNow
             };
             return await _repo.AddPaymentAsync(debtId, payment);
         }

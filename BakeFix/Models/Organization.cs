@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class Organization
@@ -6,6 +9,8 @@ namespace BakeFix.Models
         public string Name { get; set; } = "";
         public string Slug { get; set; } = "";
         public bool IsActive { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
         public List<string> EnabledModules { get; set; } = new();
         public string Timezone { get; set; } = "Asia/Kolkata";

@@ -329,7 +329,7 @@ namespace BakeFix.Repositories
                          ActivityType, OldValue, NewValue, Comment, CreatedAt
                   FROM TaskActivityLog
                   WHERE TaskId = @id
-                  ORDER BY CreatedAt ASC",
+                  ORDER BY CreatedAt DESC",
                 new { id })).ToList();
 
             return task;
@@ -494,19 +494,21 @@ namespace BakeFix.Repositories
                 log);
         }
 
-        // Used by carry-forward background service — no tenant scope
-        public async Task<IEnumerable<TaskItem>> GetOverdueAllOrgsAsync(string conn)
+        // Used by carry-forward background service — no tenant scope. Each org supplies
+        // its own already-resolved local "today" (via OrgTimeConversion), since this runs
+        // outside any per-request HttpContext and must not rely on ITenantContext.
+        public async Task<IEnumerable<TaskItem>> GetOverdueForOrgAsync(string conn, Guid orgId, DateTime orgLocalToday)
         {
             using var connection = new NpgsqlConnection(conn);
-            var today = _tenant.OrgLocalDate;
             return await connection.QueryAsync<TaskItem>(
                 @"SELECT Id, OrganizationId, CreatedByUserId, CreatedByUsername,
                          CurrentTargetDate
                   FROM Tasks
-                  WHERE CurrentTargetDate < @today
+                  WHERE OrganizationId = @orgId
+                    AND CurrentTargetDate < @orgLocalToday
                     AND Status IN ('Pending','InProgress')
                     AND DeletedAt IS NULL",
-                new { today });
+                new { orgId, orgLocalToday });
         }
 
         public async Task BulkCarryForwardAsync(string conn, IEnumerable<Guid> ids, DateTime newDate)

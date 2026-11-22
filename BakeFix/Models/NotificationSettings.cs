@@ -7,6 +7,10 @@ namespace BakeFix.Models
         public int ReminderHour { get; set; } = 20;
         public bool WeeklySummaryEnabled { get; set; } = false;
         public bool BudgetAlertsEnabled { get; set; } = true;
+
+        // Populated only by GetAllEnabledRemindersAsync (joined from Organizations.Timezone);
+        // not a real column on NotificationSettings itself.
+        public string Timezone { get; set; } = "UTC";
     }
 
     public class NotificationSettingsFormData
