@@ -1,4 +1,7 @@
-﻿namespace BakeFix.Models
+﻿using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
+namespace BakeFix.Models
 {
     public class Expense
     {
@@ -8,6 +11,8 @@
         public string Description { get; set; }
         public string Category { get; set; }
         public DateTime Date { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
         public string? PaymentMethod { get; set; }
         public Guid? DivisionId { get; set; }

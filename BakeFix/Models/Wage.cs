@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class WageFormData
@@ -19,6 +22,8 @@ namespace BakeFix.Models
         public string? EmployeeName { get; set; }
         public string? Description { get; set; }
         public DateTime Date { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
         public string? PaymentMethod { get; set; }
         public Guid? DivisionId { get; set; }

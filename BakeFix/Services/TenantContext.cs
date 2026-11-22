@@ -8,6 +8,7 @@ namespace BakeFix.Services
     public class TenantContext : ITenantContext
     {
         private readonly string _connStr;
+        private readonly TimeProvider _timeProvider;
         private string? _orgTimezone;
 
         public Guid? OrganizationId { get; }
@@ -37,19 +38,14 @@ namespace BakeFix.Services
         }
 
         public DateTime OrgLocalNow =>
-            TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, GetTzInfo());
+            OrgTimeConversion.ToLocal(_timeProvider.GetUtcNow().UtcDateTime, OrgTimezone);
 
         public DateTime OrgLocalDate => OrgLocalNow.Date;
 
-        private TimeZoneInfo GetTzInfo()
-        {
-            try { return TimeZoneInfo.FindSystemTimeZoneById(OrgTimezone); }
-            catch { return TimeZoneInfo.Utc; }
-        }
-
-        public TenantContext(IHttpContextAccessor accessor, IConfiguration config)
+        public TenantContext(IHttpContextAccessor accessor, IConfiguration config, TimeProvider timeProvider)
         {
             _connStr = config.GetConnectionString("DefaultConnection")!;
+            _timeProvider = timeProvider;
 
             var user = accessor.HttpContext?.User;
             Role     = user?.FindFirstValue(ClaimTypes.Role) ?? "";

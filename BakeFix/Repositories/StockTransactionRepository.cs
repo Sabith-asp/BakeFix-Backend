@@ -9,11 +9,13 @@ namespace BakeFix.Repositories
     {
         private readonly string _conn;
         private readonly ITenantContext _tenant;
+        private readonly IAuditClock _clock;
 
-        public StockTransactionRepository(IConfiguration config, ITenantContext tenant)
+        public StockTransactionRepository(IConfiguration config, ITenantContext tenant, IAuditClock clock)
         {
             _conn = config.GetConnectionString("DefaultConnection")!;
             _tenant = tenant;
+            _clock = clock;
         }
 
         public async Task<(IEnumerable<StockTransaction> Items, int TotalCount, decimal TotalAmount)> GetAllAsync(
@@ -61,6 +63,7 @@ namespace BakeFix.Repositories
             {
                 transaction.OrganizationId = _tenant.RequiredOrgId;
                 transaction.TotalAmount    = transaction.Quantity * transaction.UnitPrice;
+                transaction.CreatedAt      = AuditTimestamps.ForCreate(transaction.CreatedAt, _clock);
 
                 await connection.ExecuteAsync(
                     @"INSERT INTO StockTransactions

@@ -50,7 +50,8 @@ namespace BakeFix.Repositories
         {
             using var connection = new NpgsqlConnection(_conn);
             return await connection.QueryAsync<NotificationSettings>(
-                @"SELECT ns.* FROM NotificationSettings ns
+                @"SELECT ns.*, o.Timezone AS Timezone FROM NotificationSettings ns
+                  INNER JOIN Organizations o ON o.Id = ns.OrgId
                   INNER JOIN OrganizationModules om ON om.OrganizationId = ns.OrgId
                   INNER JOIN Modules m ON m.Id = om.ModuleId
                   WHERE m.Name = 'Notifications'

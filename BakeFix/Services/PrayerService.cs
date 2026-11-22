@@ -7,12 +7,14 @@ namespace BakeFix.Services
     {
         private readonly PrayerRepository _repo;
         private readonly ITenantContext _tenant;
+        private readonly IAuditClock _clock;
         private readonly ILogger<PrayerService> _logger;
 
-        public PrayerService(PrayerRepository repo, ITenantContext tenant, ILogger<PrayerService> logger)
+        public PrayerService(PrayerRepository repo, ITenantContext tenant, IAuditClock clock, ILogger<PrayerService> logger)
         {
             _repo   = repo;
             _tenant = tenant;
+            _clock  = clock;
             _logger = logger;
         }
 
@@ -94,11 +96,7 @@ namespace BakeFix.Services
             var username = _tenant.Username;
             var settings = await GetEffectiveSettingsAsync();
 
-            TimeZoneInfo tzi;
-            try { tzi = TimeZoneInfo.FindSystemTimeZoneById(settings.Timezone); }
-            catch { tzi = TimeZoneInfo.Utc; }
-
-            var localNow  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzi);
+            var localNow  = OrgTimeConversion.ToLocal(_clock.UtcNow, settings.Timezone);
             var localDate = localNow.Date;
             var prayers   = PrayerTimeCalculator.Calculate(settings, localDate);
 
@@ -118,11 +116,7 @@ namespace BakeFix.Services
             var orgSettings = await _repo.GetOrgSettingsAsync(_tenant.RequiredOrgId);
             var streak   = await _repo.GetStreakAsync(_tenant.RequiredUserId, _tenant.RequiredOrgId);
 
-            TimeZoneInfo tzi;
-            try { tzi = TimeZoneInfo.FindSystemTimeZoneById(settings.Timezone); }
-            catch { tzi = TimeZoneInfo.Utc; }
-
-            var localNow  = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzi);
+            var localNow  = OrgTimeConversion.ToLocal(_clock.UtcNow, settings.Timezone);
             var localDate = localNow.Date;
             var prayers   = PrayerTimeCalculator.Calculate(settings, localDate);
             var localTime = localNow.TimeOfDay;
@@ -172,12 +166,18 @@ namespace BakeFix.Services
 
         // ── History ──────────────────────────────────────────────────────────
 
-        public async Task<List<PrayerHistoryDay>> GetHistoryAsync(DateTime from, DateTime to)
+        public async Task<List<PrayerHistoryDay>> GetHistoryAsync(DateTime? from, DateTime? to)
         {
             var orgId  = _tenant.RequiredOrgId;
             var userId = _tenant.RequiredUserId;
 
-            var records = await _repo.GetRecordsByDateRangeAsync(userId, orgId, from, to);
+            var settings  = await GetEffectiveSettingsAsync();
+            var localDate = OrgTimeConversion.LocalDate(_clock.UtcNow, settings.Timezone);
+
+            var effectiveFrom = from ?? localDate.AddDays(-30);
+            var effectiveTo   = to ?? localDate;
+
+            var records = await _repo.GetRecordsByDateRangeAsync(userId, orgId, effectiveFrom, effectiveTo);
 
             return records
                 .GroupBy(r => r.PrayerDate.Date)
@@ -210,7 +210,7 @@ namespace BakeFix.Services
                 throw new UnauthorizedAccessException("You can only update your own prayer records.");
 
             DateTime? completionTime = PrayerStatus.CompletedStatuses.Contains(request.Status)
-                ? DateTime.UtcNow
+                ? _clock.UtcNow
                 : null;
 
             var oldStatus = record.Status;
@@ -227,7 +227,7 @@ namespace BakeFix.Services
                 ChangedByUserId = userId,
                 ChangedByUsername = username,
                 Note            = request.Notes,
-                ChangedAt       = DateTime.UtcNow
+                ChangedAt       = _clock.UtcNow
             });
 
             try
@@ -253,11 +253,18 @@ namespace BakeFix.Services
                 UserId         = userId
             };
 
+            // Streak cutoffs must use the same effective prayer timezone that PrayerDate
+            // values were written under (EnsureAndGetTodayAsync/GetDashboardAsync) — using
+            // DateTime.UtcNow.Date here instead produced a different "today" than the one
+            // the records themselves are dated against.
+            var settings  = await GetEffectiveSettingsAsync();
+            var localDate = OrgTimeConversion.LocalDate(_clock.UtcNow, settings.Timezone);
+
             // Count totals from all records
             var allRecords = await _repo.GetRecordsByDateRangeAsync(
                 userId, orgId,
-                DateTime.UtcNow.Date.AddDays(-365),
-                DateTime.UtcNow.Date);
+                localDate.AddDays(-365),
+                localDate);
 
             streak.TotalPrayersCompleted = allRecords.Count(r => PrayerStatus.CompletedStatuses.Contains(r.Status));
             streak.TotalPrayersOnTime    = allRecords.Count(r => r.Status == PrayerStatus.CompletedOnTime);
@@ -269,11 +276,11 @@ namespace BakeFix.Services
                 .ToList();
 
             int current = 0;
-            var yesterday = DateTime.UtcNow.Date.AddDays(-1);
+            var yesterday = localDate.AddDays(-1);
 
             foreach (var day in byDay)
             {
-                if (day.Key > DateTime.UtcNow.Date) continue;
+                if (day.Key > localDate) continue;
 
                 bool dayComplete = day.All(r =>
                     PrayerStatus.CompletedStatuses.Contains(r.Status) ||
@@ -287,7 +294,7 @@ namespace BakeFix.Services
 
             streak.CurrentStreak = current;
             streak.LongestStreak = Math.Max(streak.LongestStreak, current);
-            if (current > 0) streak.LastStreakDate = DateTime.UtcNow.Date;
+            if (current > 0) streak.LastStreakDate = localDate;
 
             await _repo.UpsertStreakAsync(streak);
         }
@@ -391,8 +398,20 @@ namespace BakeFix.Services
 
         public async Task<PrayerAdminSummary> GetAdminSummaryAsync(DateTime? date)
         {
-            var orgId     = _tenant.RequiredOrgId;
-            var localDate = date ?? DateTime.UtcNow.Date;
+            var orgId = _tenant.RequiredOrgId;
+
+            DateTime localDate;
+            if (date.HasValue)
+            {
+                localDate = date.Value.Date;
+            }
+            else
+            {
+                // Org-wide default — uses the org's own prayer settings timezone, not any
+                // one user's override, since this summary spans every user in the org.
+                var orgSettings = await _repo.GetOrgSettingsAsync(orgId);
+                localDate = OrgTimeConversion.LocalDate(_clock.UtcNow, orgSettings.Timezone);
+            }
 
             var records = (await _repo.GetOrgRecordsByDateAsync(orgId, localDate)).ToList();
             var streaks = (await _repo.GetAllStreaksByOrgAsync(orgId)).ToList();

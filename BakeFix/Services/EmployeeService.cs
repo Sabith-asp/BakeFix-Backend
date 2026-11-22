@@ -6,10 +6,12 @@ namespace BakeFix.Services
     public class EmployeeService
     {
         private readonly EmployeeRepository _repo;
+        private readonly IAuditClock _clock;
 
-        public EmployeeService(EmployeeRepository repo)
+        public EmployeeService(EmployeeRepository repo, IAuditClock clock)
         {
             _repo = repo;
+            _clock = clock;
         }
 
         public async Task<IEnumerable<Employee>> GetAllAsync()
@@ -63,7 +65,7 @@ namespace BakeFix.Services
             {
                 Id = Guid.NewGuid(),
                 Name = name,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = _clock.UtcNow,
             };
 
             return await _repo.CreateAsync(employee);

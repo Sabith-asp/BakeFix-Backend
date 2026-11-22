@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class TaskItem
@@ -16,13 +19,23 @@ namespace BakeFix.Models
         public string Visibility { get; set; } = "Personal";
         public DateTime OriginalTargetDate { get; set; }
         public DateTime CurrentTargetDate { get; set; }
+
+        [JsonConverter(typeof(NullableUtcInstantJsonConverter))]
         public DateTime? CompletedAt { get; set; }
         public bool NeedsFollowUp { get; set; }
         public DateTime? FollowUpDate { get; set; }
         public string? FollowUpNotes { get; set; }
+
+        [JsonConverter(typeof(NullableUtcInstantJsonConverter))]
         public DateTime? FollowUpResolvedAt { get; set; }
+
+        [JsonConverter(typeof(NullableUtcInstantJsonConverter))]
         public DateTime? DeletedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime UpdatedAt { get; set; }
         public int? SortOrder { get; set; }
         public List<TaskActivity>? ActivityLog { get; set; }
@@ -38,6 +51,8 @@ namespace BakeFix.Models
         public string? OldValue { get; set; }
         public string? NewValue { get; set; }
         public string? Comment { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
     }
 
@@ -51,7 +66,11 @@ namespace BakeFix.Models
         public string? Title { get; set; }
         public string Content { get; set; } = "";
         public string Visibility { get; set; } = "Personal";
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime UpdatedAt { get; set; }
     }
 

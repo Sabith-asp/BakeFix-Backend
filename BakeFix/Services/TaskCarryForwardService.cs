@@ -7,15 +7,18 @@ namespace BakeFix.Services
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IConfiguration _config;
+        private readonly TimeProvider _timeProvider;
         private readonly ILogger<TaskCarryForwardService> _logger;
 
         public TaskCarryForwardService(
             IServiceScopeFactory scopeFactory,
             IConfiguration config,
+            TimeProvider timeProvider,
             ILogger<TaskCarryForwardService> logger)
         {
             _scopeFactory = scopeFactory;
             _config       = config;
+            _timeProvider = timeProvider;
             _logger       = logger;
         }
 
@@ -23,7 +26,7 @@ namespace BakeFix.Services
         {
             // Catch up immediately on startup — otherwise a server restart shortly after
             // a missed local midnight leaves already-overdue tasks stuck until the next
-            // scheduled run, up to 24h later.
+            // scheduled run.
             try
             {
                 await RunCarryForwardAsync();
@@ -33,14 +36,11 @@ namespace BakeFix.Services
                 _logger.LogError(ex, "[CarryForward] Error during startup catch-up run.");
             }
 
+            var pollInterval = TimeSpan.FromMinutes(_config.GetValue<double?>("CarryForward:PollIntervalMinutes") ?? 15);
+
             while (!stoppingToken.IsCancellationRequested)
             {
-                var nextMidnightUtc = BusinessTime.NextMidnightUtc();
-                var delay = nextMidnightUtc - DateTime.UtcNow;
-
-                _logger.LogInformation("[CarryForward] Next run in {Minutes} minutes.", (int)delay.TotalMinutes);
-                await Task.Delay(delay, stoppingToken);
-
+                await Task.Delay(pollInterval, stoppingToken);
                 if (stoppingToken.IsCancellationRequested) break;
 
                 try
@@ -54,39 +54,52 @@ namespace BakeFix.Services
             }
         }
 
+        // Each org gets its own locally-resolved "today" — a single global cutoff (the old
+        // BusinessTime.Today, hardcoded to Asia/Kolkata) would carry forward tasks at the
+        // wrong moment for every org on a different timezone.
         private async Task RunCarryForwardAsync()
         {
             var connString = _config.GetConnectionString("DefaultConnection")!;
-            var today      = BusinessTime.Today;
+            var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
 
-            // Use a plain repo instance without tenant context for cross-org operation
             using var scope = _scopeFactory.CreateScope();
-            var repo = scope.ServiceProvider.GetRequiredService<TaskRepository>();
+            var orgRepo = scope.ServiceProvider.GetRequiredService<IOrganizationRepository>();
+            var repo    = scope.ServiceProvider.GetRequiredService<TaskRepository>();
 
-            var overdue = (await repo.GetOverdueAllOrgsAsync(connString)).ToList();
-            if (overdue.Count == 0)
+            var orgs = await orgRepo.GetAllAsync();
+
+            int totalCarried = 0;
+            foreach (var org in orgs)
             {
-                _logger.LogInformation("[CarryForward] No overdue tasks.");
-                return;
+                var today = OrgTimeConversion.LocalDate(utcNow, org.Timezone);
+
+                var overdue = (await repo.GetOverdueForOrgAsync(connString, org.Id, today)).ToList();
+                if (overdue.Count == 0) continue;
+
+                var ids  = overdue.Select(t => t.Id).ToList();
+                var logs = overdue.Select(t => new TaskActivity
+                {
+                    Id                  = Guid.NewGuid(),
+                    TaskId              = t.Id,
+                    PerformedByUserId   = t.CreatedByUserId,
+                    PerformedByUsername = "System",
+                    ActivityType        = "CarryForward",
+                    OldValue            = t.CurrentTargetDate.ToString("yyyy-MM-dd"),
+                    NewValue            = today.ToString("yyyy-MM-dd"),
+                    CreatedAt           = utcNow
+                }).ToList();
+
+                await repo.BulkCarryForwardAsync(connString, ids, today);
+                await repo.BulkLogActivityAsync(connString, logs);
+
+                totalCarried += overdue.Count;
+                _logger.LogInformation(
+                    "[CarryForward] Carried forward {Count} task(s) for org {OrgId} to {Date} ({Timezone}).",
+                    overdue.Count, org.Id, today.ToString("yyyy-MM-dd"), org.Timezone);
             }
 
-            var ids  = overdue.Select(t => t.Id).ToList();
-            var logs = overdue.Select(t => new TaskActivity
-            {
-                Id                  = Guid.NewGuid(),
-                TaskId              = t.Id,
-                PerformedByUserId   = t.CreatedByUserId,
-                PerformedByUsername = "System",
-                ActivityType        = "CarryForward",
-                OldValue            = t.CurrentTargetDate.ToString("yyyy-MM-dd"),
-                NewValue            = today.ToString("yyyy-MM-dd"),
-                CreatedAt           = DateTime.UtcNow
-            }).ToList();
-
-            await repo.BulkCarryForwardAsync(connString, ids, today);
-            await repo.BulkLogActivityAsync(connString, logs);
-
-            _logger.LogInformation("[CarryForward] Carried forward {Count} tasks to {Date}.", overdue.Count, today.ToString("yyyy-MM-dd"));
+            if (totalCarried == 0)
+                _logger.LogInformation("[CarryForward] No overdue tasks across any org.");
         }
     }
 }

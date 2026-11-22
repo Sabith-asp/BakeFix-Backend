@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class ProductCategory
@@ -5,6 +8,8 @@ namespace BakeFix.Models
         public Guid Id { get; set; }
         public Guid OrganizationId { get; set; }
         public string Name { get; set; } = "";
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
     }
 

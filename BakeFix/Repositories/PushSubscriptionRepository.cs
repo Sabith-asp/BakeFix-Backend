@@ -9,16 +9,20 @@ namespace BakeFix.Repositories
     {
         private readonly string _conn;
         private readonly ITenantContext _tenant;
+        private readonly IAuditClock _clock;
 
-        public PushSubscriptionRepository(IConfiguration config, ITenantContext tenant)
+        public PushSubscriptionRepository(IConfiguration config, ITenantContext tenant, IAuditClock clock)
         {
             _conn = config.GetConnectionString("DefaultConnection")!;
             _tenant = tenant;
+            _clock = clock;
         }
 
         public async Task SaveAsync(Models.PushSubscription sub)
         {
             using var connection = new NpgsqlConnection(_conn);
+            sub.CreatedAt = AuditTimestamps.ForCreate(sub.CreatedAt, _clock);
+
             // Replace existing subscription for the same user+endpoint
             await connection.ExecuteAsync(
                 "DELETE FROM PushSubscriptions WHERE UserId = @UserId AND Endpoint = @Endpoint",

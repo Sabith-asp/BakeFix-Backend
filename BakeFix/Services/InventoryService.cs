@@ -9,15 +9,21 @@ namespace BakeFix.Services
         private readonly ProductCategoryRepository _categoryRepo;
         private readonly ProductRepository _productRepo;
         private readonly StockTransactionRepository _txRepo;
+        private readonly ITenantContext _tenant;
+        private readonly IAuditClock _clock;
 
         public InventoryService(
             ProductCategoryRepository categoryRepo,
             ProductRepository productRepo,
-            StockTransactionRepository txRepo)
+            StockTransactionRepository txRepo,
+            ITenantContext tenant,
+            IAuditClock clock)
         {
             _categoryRepo = categoryRepo;
             _productRepo  = productRepo;
             _txRepo       = txRepo;
+            _tenant       = tenant;
+            _clock        = clock;
         }
 
         // ── Categories ───────────────────────────────────────────────────────
@@ -34,7 +40,7 @@ namespace BakeFix.Services
             {
                 Id        = Guid.NewGuid(),
                 Name      = data.Name.Trim(),
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = _clock.UtcNow
             });
         }
 
@@ -93,8 +99,8 @@ namespace BakeFix.Services
                 CostPrice    = data.CostPrice,
                 SellingPrice = data.SellingPrice,
                 LowStockAlert = data.LowStockAlert,
-                CreatedAt    = DateTime.UtcNow,
-                UpdatedAt    = DateTime.UtcNow
+                CreatedAt    = _clock.UtcNow,
+                UpdatedAt    = _clock.UtcNow
             });
         }
 
@@ -117,7 +123,7 @@ namespace BakeFix.Services
                 CostPrice    = data.CostPrice,
                 SellingPrice = data.SellingPrice,
                 LowStockAlert = data.LowStockAlert,
-                UpdatedAt    = DateTime.UtcNow
+                UpdatedAt    = _clock.UtcNow
             });
         }
 
@@ -132,8 +138,16 @@ namespace BakeFix.Services
             int safePage     = Math.Max(1, page);
             int safePageSize = Math.Clamp(pageSize, 1, 100);
 
-            DateTime? s = string.IsNullOrEmpty(startDate) ? null : DateTime.Parse(startDate);
-            DateTime? e = string.IsNullOrEmpty(endDate)   ? null : DateTime.Parse(endDate);
+            // StockTransactions.Date is a TIMESTAMP (the one business field with real
+            // time-of-day), so a plain calendar-day filter string must be converted to a
+            // UTC instant using the org's own timezone, rather than compared naively.
+            // GetAllAsync's SQL uses `Date >= @startDate` / `Date <= @endDate`, so the end
+            // boundary is the last instant of that org-local calendar day, not midnight.
+            var zone = OrgTimeConversion.ResolveZone(_tenant.OrgTimezone);
+            DateTime? s = string.IsNullOrEmpty(startDate) ? null
+                : TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(DateTime.Parse(startDate).Date, DateTimeKind.Unspecified), zone);
+            DateTime? e = string.IsNullOrEmpty(endDate) ? null
+                : TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(DateTime.Parse(endDate).Date.AddDays(1).AddTicks(-1), DateTimeKind.Unspecified), zone);
 
             var (items, totalCount, totalAmount) = await _txRepo.GetAllAsync(productId, type, s, e, safePage, safePageSize);
 
@@ -169,6 +183,13 @@ namespace BakeFix.Services
                         $"Insufficient stock. Available: {product.CurrentStock} {product.Unit}.");
             }
 
+            // data.Date is entered as the org's own local wall-clock time (the one business
+            // field with real time-of-day) — convert it to UTC before storing, consistent
+            // with the "backend owns timezone interpretation" convention everywhere else.
+            var utcDate = TimeZoneInfo.ConvertTimeToUtc(
+                DateTime.SpecifyKind(data.Date, DateTimeKind.Unspecified),
+                OrgTimeConversion.ResolveZone(_tenant.OrgTimezone));
+
             return await _txRepo.CreateAsync(new StockTransaction
             {
                 Id                 = Guid.NewGuid(),
@@ -180,8 +201,8 @@ namespace BakeFix.Services
                 PaymentMethod      = data.PaymentMethod,
                 DivisionId         = data.DivisionId,
                 Note               = data.Note?.Trim(),
-                Date               = data.Date,
-                CreatedAt          = DateTime.UtcNow
+                Date               = utcDate,
+                CreatedAt          = _clock.UtcNow
             });
         }
 

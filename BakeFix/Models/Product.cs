@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class Product
@@ -15,7 +18,11 @@ namespace BakeFix.Models
         public decimal CurrentStock { get; set; }
         public decimal? LowStockAlert { get; set; }
         public bool IsActive { get; set; } = true;
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime UpdatedAt { get; set; }
     }
 

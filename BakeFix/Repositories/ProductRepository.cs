@@ -141,14 +141,17 @@ namespace BakeFix.Repositories
                 WHERE OrganizationId = @orgId AND IsActive = TRUE",
                 new { orgId });
 
+            var todayStart = _tenant.OrgLocalDate;
+            var todayEnd   = todayStart.AddDays(1);
+
             var todaySales = await connection.QuerySingleAsync<(decimal Amount, int Count)>(@"
                 SELECT COALESCE(SUM(TotalAmount), 0) AS Amount, COUNT(*) AS Count
                 FROM StockTransactions
                 WHERE OrganizationId = @orgId
                   AND Type = 'Sale'
-                  AND Date >= CURRENT_DATE
-                  AND Date < CURRENT_DATE + INTERVAL '1 day'",
-                new { orgId });
+                  AND Date >= @todayStart
+                  AND Date < @todayEnd",
+                new { orgId, todayStart, todayEnd });
 
             stats.TodaySalesAmount = todaySales.Amount;
             stats.TodaySalesCount  = todaySales.Count;

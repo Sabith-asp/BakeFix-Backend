@@ -1,4 +1,5 @@
 using BakeFix.Models;
+using BakeFix.Services;
 using Dapper;
 using Npgsql;
 
@@ -18,10 +19,12 @@ namespace BakeFix.Repositories
     public class OrganizationRepository : IOrganizationRepository
     {
         private readonly string _conn;
+        private readonly IAuditClock _clock;
 
-        public OrganizationRepository(IConfiguration config)
+        public OrganizationRepository(IConfiguration config, IAuditClock clock)
         {
             _conn = config.GetConnectionString("DefaultConnection")!;
+            _clock = clock;
         }
 
         public async Task<IEnumerable<Organization>> GetAllAsync()
@@ -70,7 +73,7 @@ namespace BakeFix.Repositories
 
             org.Id       = Guid.NewGuid();
             org.IsActive = true;
-            org.CreatedAt = DateTime.UtcNow;
+            org.CreatedAt = AuditTimestamps.ForCreate(org.CreatedAt, _clock);
 
             await connection.ExecuteAsync(
                 "INSERT INTO Organizations (Id, Name, Slug, IsActive, CreatedAt, Timezone) VALUES (@Id, @Name, @Slug, @IsActive, @CreatedAt, @Timezone)",

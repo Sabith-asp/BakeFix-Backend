@@ -7,11 +7,13 @@ namespace BakeFix.Services
     {
         private readonly TaskRepository _repo;
         private readonly ITenantContext _tenant;
+        private readonly IAuditClock _clock;
 
-        public TaskService(TaskRepository repo, ITenantContext tenant)
+        public TaskService(TaskRepository repo, ITenantContext tenant, IAuditClock clock)
         {
             _repo   = repo;
             _tenant = tenant;
+            _clock  = clock;
         }
 
         public Task<(IEnumerable<TaskItem> Items, string? NextCursor)> GetMyTasksAsync(
@@ -61,8 +63,8 @@ namespace BakeFix.Services
                 Visibility          = request.Visibility,
                 OriginalTargetDate  = targetDate,
                 CurrentTargetDate   = targetDate,
-                CreatedAt           = DateTime.UtcNow,
-                UpdatedAt           = DateTime.UtcNow
+                CreatedAt           = _clock.UtcNow,
+                UpdatedAt           = _clock.UtcNow
             };
 
             await _repo.CreateAsync(task);
@@ -73,7 +75,7 @@ namespace BakeFix.Services
                 PerformedByUserId   = _tenant.RequiredUserId,
                 PerformedByUsername = _tenant.Username,
                 ActivityType        = "Created",
-                CreatedAt           = DateTime.UtcNow
+                CreatedAt           = _clock.UtcNow
             });
 
             return task;
@@ -95,7 +97,7 @@ namespace BakeFix.Services
                 Priority           = request.Priority,
                 AssignedToUserId   = !string.IsNullOrWhiteSpace(request.AssignedToUserId) ? Guid.Parse(request.AssignedToUserId) : null,
                 AssignedToUsername = request.AssignedToUsername,
-                UpdatedAt          = DateTime.UtcNow
+                UpdatedAt          = _clock.UtcNow
             };
 
             var updated = await _repo.UpdateAsync(task);
@@ -108,7 +110,7 @@ namespace BakeFix.Services
                     PerformedByUserId   = _tenant.RequiredUserId,
                     PerformedByUsername = _tenant.Username,
                     ActivityType        = "Updated",
-                    CreatedAt           = DateTime.UtcNow
+                    CreatedAt           = _clock.UtcNow
                 });
             }
             return updated;
@@ -123,7 +125,7 @@ namespace BakeFix.Services
             var existing = await _repo.GetByIdAsync(id)
                 ?? throw new ArgumentException("Task not found.");
 
-            DateTime? completedAt = status == "Completed" ? DateTime.UtcNow : null;
+            DateTime? completedAt = status == "Completed" ? _clock.UtcNow : null;
             var updated = await _repo.ChangeStatusAsync(id, status, completedAt);
 
             if (updated)
@@ -137,7 +139,7 @@ namespace BakeFix.Services
                     ActivityType        = status == "Completed" ? "Completed" : "StatusChanged",
                     OldValue            = existing.Status,
                     NewValue            = status,
-                    CreatedAt           = DateTime.UtcNow
+                    CreatedAt           = _clock.UtcNow
                 });
             }
             return updated;
@@ -163,7 +165,7 @@ namespace BakeFix.Services
                     ActivityType        = "DateMoved",
                     OldValue            = existing.CurrentTargetDate.ToString("yyyy-MM-dd"),
                     NewValue            = newDate.ToString("yyyy-MM-dd"),
-                    CreatedAt           = DateTime.UtcNow
+                    CreatedAt           = _clock.UtcNow
                 });
             }
             return updated;
@@ -193,7 +195,7 @@ namespace BakeFix.Services
                         PerformedByUsername = _tenant.Username,
                         ActivityType        = "FollowUpSet",
                         NewValue            = parsedDate.ToString("yyyy-MM-dd"),
-                        CreatedAt           = DateTime.UtcNow
+                        CreatedAt           = _clock.UtcNow
                     });
                 }
                 return updated;
@@ -210,7 +212,7 @@ namespace BakeFix.Services
                         PerformedByUserId   = _tenant.RequiredUserId,
                         PerformedByUsername = _tenant.Username,
                         ActivityType        = "FollowUpCleared",
-                        CreatedAt           = DateTime.UtcNow
+                        CreatedAt           = _clock.UtcNow
                     });
                 }
                 return updated;
@@ -229,7 +231,7 @@ namespace BakeFix.Services
                     PerformedByUserId   = _tenant.RequiredUserId,
                     PerformedByUsername = _tenant.Username,
                     ActivityType        = "FollowUpResolved",
-                    CreatedAt           = DateTime.UtcNow
+                    CreatedAt           = _clock.UtcNow
                 });
             }
             return updated;
@@ -256,7 +258,7 @@ namespace BakeFix.Services
                     ActivityType        = "VisibilityChanged",
                     OldValue            = existing.Visibility,
                     NewValue            = visibility,
-                    CreatedAt           = DateTime.UtcNow
+                    CreatedAt           = _clock.UtcNow
                 });
             }
             return updated;
@@ -284,7 +286,7 @@ namespace BakeFix.Services
                     ActivityType        = "PriorityChanged",
                     OldValue            = existing.Priority,
                     NewValue            = priority,
-                    CreatedAt           = DateTime.UtcNow
+                    CreatedAt           = _clock.UtcNow
                 });
             }
             return updated;
@@ -306,7 +308,7 @@ namespace BakeFix.Services
                 PerformedByUsername = _tenant.Username,
                 ActivityType        = "CommentAdded",
                 Comment             = comment.Trim(),
-                CreatedAt           = DateTime.UtcNow
+                CreatedAt           = _clock.UtcNow
             });
         }
 

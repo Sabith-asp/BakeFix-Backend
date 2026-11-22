@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class StockTransaction
@@ -16,7 +19,13 @@ namespace BakeFix.Models
         public Guid? DivisionId { get; set; }
         public string? DivisionName { get; set; }
         public string? Note { get; set; }
+
+        // The one business field with real time-of-day (a TIMESTAMP column, not DATE) —
+        // stored as a UTC instant, unlike every other "Date"-named field in this project.
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime Date { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
     }
 

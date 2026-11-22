@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public class Debt
@@ -11,6 +14,8 @@ namespace BakeFix.Models
         public DateTime? DueDate { get; set; }
         public string? Notes { get; set; }
         public bool IsSettled { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
 
         // Aggregated from DebtPayments (set by repository)
@@ -28,6 +33,8 @@ namespace BakeFix.Models
         public decimal Amount { get; set; }
         public DateTime Date { get; set; }
         public string? Notes { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
     }
 

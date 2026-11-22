@@ -1,4 +1,7 @@
-﻿namespace BakeFix.Models
+﻿using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
+namespace BakeFix.Models
 {
     public class IncomeFormData
     {
@@ -16,6 +19,8 @@
         public decimal Amount { get; set; }
         public string Description { get; set; }
         public DateTime Date { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
         public string? PaymentMethod { get; set; }
         public Guid? DivisionId { get; set; }

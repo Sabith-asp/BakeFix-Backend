@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using BakeFix.Services.Json;
+
 namespace BakeFix.Models
 {
     public static class PrayerStatus
@@ -40,13 +43,19 @@ namespace BakeFix.Models
         public DateTime PrayerDate { get; set; }
         public TimeSpan PrayerTime { get; set; }
         public TimeSpan PrayerEndTime { get; set; }
+
+        [JsonConverter(typeof(NullableUtcInstantJsonConverter))]
         public DateTime? ActualCompletionTime { get; set; }
         public string Status { get; set; } = PrayerStatus.Upcoming;
         public string? CongregationType { get; set; }
         public Guid? UpdatedByUserId { get; set; }
         public string? UpdatedByUsername { get; set; }
         public string? Notes { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime LastUpdatedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
         public List<PrayerStatusHistory>? History { get; set; }
     }
@@ -60,6 +69,8 @@ namespace BakeFix.Models
         public Guid? ChangedByUserId { get; set; }
         public string? ChangedByUsername { get; set; }
         public string? Note { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime ChangedAt { get; set; }
     }
 
@@ -72,7 +83,11 @@ namespace BakeFix.Models
         public string ReminderType { get; set; } = "";
         public int MinutesOffset { get; set; }
         public bool IsEnabled { get; set; } = true;
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime UpdatedAt { get; set; }
     }
 
@@ -87,7 +102,11 @@ namespace BakeFix.Models
         public string AsrMethod { get; set; } = "Standard";
         public double FajrAngle { get; set; } = 18;
         public double IshaAngle { get; set; } = 17;
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime UpdatedAt { get; set; }
     }
 
@@ -101,6 +120,8 @@ namespace BakeFix.Models
         public DateTime? LastStreakDate { get; set; }
         public int TotalPrayersCompleted { get; set; }
         public int TotalPrayersOnTime { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime LastUpdatedAt { get; set; }
     }
 
@@ -199,7 +220,11 @@ namespace BakeFix.Models
         public double? Longitude { get; set; }
         public string? Timezone { get; set; }
         public string? CityName { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime CreatedAt { get; set; }
+
+        [JsonConverter(typeof(UtcInstantJsonConverter))]
         public DateTime UpdatedAt { get; set; }
     }
 
